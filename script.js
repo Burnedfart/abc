@@ -10,6 +10,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const sendBtn = document.getElementById('sendBtn');
   const connectionStatus = document.getElementById('connection-status');
   const chat = document.getElementById('chat');
+  const blockedWordsb64 = ['bmlnZ2Vy', 'bmlnZ2E=', 'Y29vbg==', 'ZmFnZ290', 'ZmFn'];
+  const blockedWords = blockedWordsb64.map(b64 => atob(b64));
 
   let roomId = null;
   let peerId = null;
@@ -80,6 +82,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
       clearSignal(fromPeerId);
     });
+  }
+
+  function containsBlockedWord(text) {
+    const lowerText = text.toLowerCase();
+    return blockedWords.some(word => lowerText.includes(word));
   }
 
   function createPeerConnection(otherPeerId, initiator) {
@@ -227,6 +234,10 @@ window.addEventListener('DOMContentLoaded', () => {
   sendBtn.addEventListener('click', () => {
     const msg = messageInput.value.trim();
     if (!msg) return;
+
+    if (containsBlockedWord(msg)) {
+      return;
+    }
 
     logChatMessage('Me', msg, true);
     messageInput.value = '';
