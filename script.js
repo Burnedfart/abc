@@ -23,8 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const DEFAULT_ROOMS = {
     'RoomOne': 'count-room1',
-    'RoomTwo': 'count-room2',
-    'RoomThree': 'count-room3'
   };
 
   function generateId() {
