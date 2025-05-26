@@ -128,9 +128,9 @@ document.addEventListener('DOMContentLoaded', () => {
     newPeer.on('error', (err) => console.error('Peer error:', err));
   }
 
-  function setupRoomListeners() {
-    const peersRef = db.ref(`rooms/${roomId}/peers`);
-    peersRef.on('value', (snapshot) => {
+    function setupRoomListeners() {
+      const peersRef = db.ref(`rooms/${roomId}/peers`);
+      peersRef.on('value', (snapshot) => {
       const peersInRoom = snapshot.val() || {};
       const otherPeers = Object.keys(peersInRoom).filter(id => id !== peerId);
 
@@ -148,11 +148,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      setStatus(Object.keys(peers).length > 0);
+    
+      if (Object.keys(peersInRoom).length === 0) {
+        db.ref(`rooms/${roomId}`).remove();
+      }
+
+    setStatus(Object.keys(peers).length > 0);
     });
 
     listenForSignals();
-  }
+}
+
 
   function updateRoomList() {
     const roomsRef = db.ref('rooms');
