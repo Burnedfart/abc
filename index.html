@@ -20,23 +20,22 @@
       </p>
       <p>To create a custom room id, type it in and click Host Room.</p>
       <p>Share your room ID and have the other person enter it in the Connect field, then click Connect.</p>
-    </div>
-    <h3>Default Rooms</h3>
+      <h3>Default Rooms</h3>
       <ul>
-        <li>Room1: <span id="count-room1">Users: 0</span></li>
-        <li>Room2: <span id="count-room2">Users: 0</span></li>
-        <li>Room3: <span id="count-room3">Users: 0</span></li>
+        <li>RoomOne: <span id="count-room1">Users: 0</span></li>
+        <li>RoomTwo: <span id="count-room2">Users: 0</span></li>
+        <li>RoomThree: <span id="count-room3">Users: 0</span></li>
       </ul>
 
     <h3>Public Rooms</h3>
-    <ul id="publicRoomList"></ul>
+  <ul id="publicRoomList"></ul>
+    </div>
+    
 
 
     <div class="chat-container">
       <div id="connection-status">🔴 Disconnected</div>
-      <label>
-        <input type="checkbox" id="publicRoomToggle"> Make room public
-      </label>
+      
 
       <div>
         <label>Your Nickname:</label><br />
@@ -48,6 +47,9 @@
         <input type="text" id="roomId" placeholder="Enter Room ID (or leave blank)" />
         <button id="hostBtn">Host Room</button>
         <button id="copyRoomId">Copy RoomID</button>
+        <label>
+        <input type="checkbox" id="publicRoomToggle"> Make room public
+      </label>
       </div>
 
       <div style="margin-top: 20px;">
