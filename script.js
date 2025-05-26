@@ -11,8 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const connectionStatus = document.getElementById('connection-status');
   const chat = document.getElementById('chat');
   const copyRoomIdBtn = document.getElementById('copyRoomId');
-  const publicToggle = document.getElementById('publicToggle');
-  const roomList = document.getElementById('roomList');
+  const publicToggle = document.getElementById('publicRoomToggle');
+  const publicRoomList = document.getElementById('publicRoomList');
 
   let roomId = null;
   let peerId = null;
@@ -21,7 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const peers = {};
 
-  const DEFAULT_ROOMS = ['lobby', 'general', 'default'];
+  const DEFAULT_ROOMS = {
+    'RoomOne': 'count-room1',
+    'RoomTwo': 'count-room2',
+    'RoomThree': 'count-room3'
+  };
 
   function generateId() {
     return Math.random().toString(36).substring(2, 10);
@@ -154,21 +158,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const roomsRef = db.ref('rooms');
     roomsRef.on('value', (snapshot) => {
       const rooms = snapshot.val() || {};
-      const roomCounts = {};
 
-      DEFAULT_ROOMS.forEach(id => roomCounts[id] = 0);
+      // Reset default room counts
+      Object.entries(DEFAULT_ROOMS).forEach(([name, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = 'Users: 0';
+      });
+
+      const publicRooms = [];
 
       for (const [id, room] of Object.entries(rooms)) {
-        if (DEFAULT_ROOMS.includes(id) || room.public) {
-          roomCounts[id] = Object.keys(room.peers || {}).length;
+        const userCount = Object.keys(room.peers || {}).length;
+
+        if (DEFAULT_ROOMS[id]) {
+          const el = document.getElementById(DEFAULT_ROOMS[id]);
+          if (el) el.textContent = `Users: ${userCount}`;
+        } else if (room.public) {
+          publicRooms.push({ id, count: userCount });
         }
       }
 
-      roomList.innerHTML = '';
-      Object.entries(roomCounts).forEach(([id, count]) => {
+      publicRoomList.innerHTML = '';
+      publicRooms.forEach(({ id, count }) => {
         const li = document.createElement('li');
         li.textContent = `${id}: ${count} users`;
-        roomList.appendChild(li);
+        publicRoomList.appendChild(li);
       });
     });
   }
@@ -183,17 +197,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     isPublic = publicToggle.checked;
 
-    const myPeerRef = db.ref(`rooms/${roomId}/peers/${generateId()}`);
+    peerId = generateId();
+    const myPeerRef = db.ref(`rooms/${roomId}/peers/${peerId}`);
     myPeerRef.set({ nickname });
     myPeerRef.onDisconnect().remove();
 
     db.ref(`rooms/${roomId}/public`).set(isPublic);
 
-    logSystemMessage(`You began hosting room: ${roomId} (${isPublic ? 'Public' : 'Private'})`);
-
-    peerId = generateId();
-    myPeerRef.set({ nickname });
-    myPeerRef.onDisconnect().remove();
+    logSystemMessage(`Hosting room: ${roomId} (${isPublic ? 'Public' : 'Private'})`);
 
     setupRoomListeners();
     messageInput.disabled = false;
@@ -208,12 +219,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!roomId) return alert('Enter a Room ID to connect.');
 
     peerId = generateId();
-
-    logSystemMessage(`Joining room: ${roomId} as ${nickname} (${peerId})`);
-
     const myPeerRef = db.ref(`rooms/${roomId}/peers/${peerId}`);
     myPeerRef.set({ nickname });
     myPeerRef.onDisconnect().remove();
+
+    logSystemMessage(`Joining room: ${roomId} as ${nickname}`);
 
     setupRoomListeners();
     messageInput.disabled = false;
