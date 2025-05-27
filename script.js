@@ -43,6 +43,16 @@ document.addEventListener('DOMContentLoaded', () => {
     chat.scrollTop = chat.scrollHeight;
   }
 
+  function updateUserList(peersInRoom) {
+  const userList = document.getElementById('userList');
+  userList.innerHTML = ''; // Clear old list
+
+  for (const [id, info] of Object.entries(peersInRoom)) {
+    const li = document.createElement('li');
+    li.textContent = `${id} (${info.nickname || 'No nickname'})`;
+    userList.appendChild(li);
+    }
+  }
   function logChatMessage(sender, msg, isLocal) {
     const div = document.createElement('div');
     div.textContent = `${sender}: ${msg}`;
@@ -127,35 +137,38 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setupRoomListeners() {
-    const peersRef = db.ref(`rooms/${roomId}/peers`);
-    peersRef.on('value', (snapshot) => {
-      const peersInRoom = snapshot.val() || {};
-      const otherPeers = Object.keys(peersInRoom).filter(id => id !== peerId);
+  const peersRef = db.ref(`rooms/${roomId}/peers`);
+  peersRef.on('value', (snapshot) => {
+    const peersInRoom = snapshot.val() || {};
+    const otherPeers = Object.keys(peersInRoom).filter(id => id !== peerId);
 
-      otherPeers.forEach(otherPeerId => {
-        if (!peers[otherPeerId]) {
-          const initiator = peerId < otherPeerId;
-          createPeerConnection(otherPeerId, initiator);
-        }
-      });
-
-      Object.keys(peers).forEach(id => {
-        if (!peersInRoom[id]) {
-          peers[id].peer.destroy();
-          delete peers[id];
-        }
-      });
-
-      // Clean up empty public rooms
-      if (Object.keys(peersInRoom).length === 0) {
-        db.ref(`rooms/${roomId}`).remove();
+    otherPeers.forEach(otherPeerId => {
+      if (!peers[otherPeerId]) {
+        const initiator = peerId < otherPeerId;
+        createPeerConnection(otherPeerId, initiator);
       }
-
-      setStatus(Object.keys(peers).length > 0);
     });
 
-    listenForSignals();
-  }
+    Object.keys(peers).forEach(id => {
+      if (!peersInRoom[id]) {
+        peers[id].peer.destroy();
+        delete peers[id];
+      }
+    });
+
+    // Clean up empty public rooms
+    if (Object.keys(peersInRoom).length === 0) {
+      db.ref(`rooms/${roomId}`).remove();
+    }
+
+    setStatus(Object.keys(peers).length > 0);
+
+    // Update the user list pane
+    updateUserList(peersInRoom);
+  });
+
+  listenForSignals();
+}
 
   function updateRoomList() {
     const roomsRef = db.ref('rooms');
