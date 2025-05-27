@@ -7,6 +7,11 @@ body {
   justify-content: center;
 }
 
+#userListPane {
+  border-radius: 8px;
+  background: white;
+}
+
  #connection-status { 
   margin-bottom: 10px; 
   font-weight: bold; 
