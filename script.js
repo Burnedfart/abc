@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const copyRoomIdBtn = document.getElementById('copyRoomId');
   const publicToggle = document.getElementById('publicRoomToggle');
   const publicRoomList = document.getElementById('publicRoomList');
+  const peerNickname = peers[otherPeerId]?.nickname || 'Unknown';
 
   let roomId = null;
   let peerId = null;
@@ -128,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     newPeer.on('close', () => {
-      logSystemMessage(`Disconnected from peer ${otherPeerId} (${nickname})`);
+      logSystemMessage(`Disconnected from peer ${otherPeerId} (${peerNickname})`);
       delete peers[otherPeerId];
       if (Object.keys(peers).length === 0) setStatus(false);
     });
