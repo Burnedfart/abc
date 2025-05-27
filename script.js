@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     newPeer.on('close', () => {
-      logSystemMessage(`Disconnected from peer ${otherPeerId}`);
+      logSystemMessage(`Disconnected from peer ${otherPeerId} (${nickname})`);
       delete peers[otherPeerId];
       if (Object.keys(peers).length === 0) setStatus(false);
     });
