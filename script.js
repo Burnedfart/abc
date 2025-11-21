@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Periodically update public room list
   setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) broadcastPublicRoomsRequest();
-  }, 10000);
+  }, 4000);
 
   function broadcastPublicRoomsRequest() {
     ws.send(JSON.stringify({ type: 'listRooms' }));
