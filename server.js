@@ -43,14 +43,15 @@ function joinRoom(socket, roomId, uid, nickname, isPublic) {
     rooms[roomId] = { public: isPublic, peers: {} };
   }
 
-  rooms[roomId].public = rooms[roomId].peers && Object.keys(rooms[roomId].peers).length > 0
+  rooms[roomId].public = Object.keys(rooms[roomId].peers).length > 0
     ? rooms[roomId].public
     : isPublic;
 
   rooms[roomId].peers[uid] = { socket, nickname };
 
-  broadcastPublicRooms();
+  // Broadcast to all clients in the room and all connected clients
   broadcastRoomPeers(roomId);
+  broadcastPublicRooms();
 }
 
 function leaveRoom(uid) {
@@ -59,7 +60,9 @@ function leaveRoom(uid) {
       delete room.peers[uid];
 
       broadcastRoomPeers(roomId);
-      if (Object.keys(room.peers).length === 0) delete rooms[roomId];
+      if (Object.keys(room.peers).length === 0) {
+        delete rooms[roomId];
+      }
       broadcastPublicRooms();
     }
   }
@@ -77,14 +80,24 @@ server.on('connection', socket => {
     const { type } = data;
 
     switch (type) {
-      case 'join':
+      case 'join': {
         const { roomId, uid, nickname, isPublic } = data;
         currentRoom = roomId;
         currentUid = uid;
         joinRoom(socket, roomId, uid, nickname, isPublic);
+
+        // Send current public rooms to this new client immediately
+        if (socket.readyState === WebSocket.OPEN) {
+          broadcastPublicRooms();
+        }
+        break;
+      }
+
+      case 'leave':
+        leaveRoom(data.uid);
         break;
 
-      case 'signal':
+      case 'signal': {
         const { to, signal, from } = data;
         const room = rooms[currentRoom];
         if (room && room.peers[to]) {
@@ -93,6 +106,11 @@ server.on('connection', socket => {
             targetSocket.send(JSON.stringify({ type: 'signal', from, signal }));
           }
         }
+        break;
+      }
+
+      case 'listRooms':
+        broadcastPublicRooms();
         break;
 
       default:
