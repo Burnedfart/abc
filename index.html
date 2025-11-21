@@ -3,27 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>P2P Chat with Firebase Signaling</title>
+  <title>P2P Chat</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
   <div class="main-container">
     <div class="instructions">
       <h2>How to use</h2>
-      <p>The public chat room is called RoomOne. If you want to chat with a bunch of other people, join RoomOne, it's always being hosted. If you click host on an ID that is already hosted, you'll just be connected. 
-        If you want to have a private chat with a friend, host any Room ID and make sure your friend can get it (email, predetermined, etc). 
-      </p>
-      <p>If you're using a VPN, please turn it off before using, as it will cause errors and random disconnections otherwise. </p>
-      <p>To create a custom room id, type it in and click Host Room.</p>
-      <p>Share your room ID and have the other person enter it in the Connect field, then click Connect.</p>
+      <p>Join RoomOne for public chat or host any custom Room ID. Share the Room ID with friends to connect.</p>
       <h3>Default Rooms</h3>
       <ul>
         <li>RoomOne: <span id="count-room1">Users: 0</span></li>
       </ul>
-    <h3>Public Rooms</h3>
-  <ul id="publicRoomList"></ul>
+      <h3>Public Rooms</h3>
+      <ul id="publicRoomList"></ul>
     </div>
     <div class="chat-container">
       <div id="connection-status">🔴 Disconnected</div>
@@ -35,41 +28,28 @@
         <label>Host a Room:</label><br />
         <input type="text" id="roomId" placeholder="Enter Room ID (or leave blank)" />
         <button id="hostBtn">Host Room</button>
-        <button id="copyRoomId">Copy RoomID</button>
         <label>
-        <input type="checkbox" id="publicRoomToggle"> Make room public
-      </label>
+          <input type="checkbox" id="publicRoomToggle"> Make room public
+        </label>
       </div>
-      <div style="margin-top: 20px;">
-        <label>Connect to another Room ID:</label><br />
-        <input type="text" id="connectToRoom" placeholder="Paste their Room ID here" />
+      <div style="margin-top: 10px;">
+        <label>Connect to Room:</label><br />
+        <input type="text" id="connectToRoom" placeholder="Enter Room ID" />
         <button id="connectBtn">Connect</button>
       </div>
       <div id="chat"></div>
       <div style="margin-top:10px;">
         <input type="text" id="messageInput" placeholder="Type your message..." disabled />
         <button id="sendBtn" disabled>Send</button>
+        <button id="disconnectBtn">Disconnect</button>
       </div>
     </div>
     <div class="userListPane">
-      <div>
-        <h3>Connected Users</h3>
-        <ul id="userList"></ul>
-      </div>
+      <h3>Connected Users</h3>
+      <ul id="userList"></ul>
     </div>
   </div>
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyA3goqO3rp5_uXJKV3RNFVkso3W7C-rYTk",
-      authDomain: "p2pchat-88e5e.firebaseapp.com",
-      databaseURL: "https://p2pchat-88e5e-default-rtdb.firebaseio.com",
-      projectId: "p2pchat-88e5e",
-      storageBucket: "p2pchat-88e5e.appspot.com",
-      messagingSenderId: "77422680773",
-      appId: "1:77422680773:web:f2437b0a354cc2316f6eac"
-    };
-    firebase.initializeApp(firebaseConfig);
-  </script>
+
   <script src="simplepeer.min.js"></script>
   <script src="script.js"></script>
 </body>
