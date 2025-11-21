@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const hostBtn = document.getElementById('hostBtn');
   const joinBtn = document.getElementById('connectBtn');
-  const disconnectBtn = document.getElementById('disconnectBtn'); // manual disconnect
+  const disconnectBtn = document.getElementById('disconnectBtn'); 
   const nicknameInput = document.getElementById('nicknameInput');
   const roomIdInput = document.getElementById('roomId');
   const connectToRoomInput = document.getElementById('connectToRoom');
@@ -16,10 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const WS_ENDPOINT = "wss://p2pchat-r8so.onrender.com";
   let ws;
   let roomId = null;
-  let uid = Math.random().toString(36).substring(2,10);
+  let uid = Math.random().toString(36).substring(2, 10);
   let nickname = null;
   let isPublic = false;
   const peers = {};
+  const messageQueue = {}; // queue messages until peer connects
 
   function setStatus(connected) {
     connectionStatus.textContent = connected ? '🟢 Connected' : '🔴 Disconnected';
@@ -45,9 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateUserList(peersInRoom) {
     userList.innerHTML = '';
-    peersInRoom.forEach(({ uid, nickname }) => {
+    peersInRoom.forEach(p => {
       const li = document.createElement('li');
-      li.textContent = `${nickname || 'No nickname'} (${uid})`;
+      li.textContent = `${p.nickname || 'No nickname'} (${p.uid})`;
       userList.appendChild(li);
     });
   }
@@ -58,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ws.onopen = () => {
       setStatus(true);
       logSystemMessage('Connected to signaling server.');
-      if (roomId && nickname) joinRoom(); // send join if already set
+      if (roomId) joinRoomSendWS();
     };
 
     ws.onmessage = (event) => {
@@ -89,42 +90,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         case 'signal':
           const { from, signal } = msg;
-          if (!peers[from]) createPeerConnection(from, false);
+          if (!peers[from]) createPeerConnection(from, uid < from);
           try { peers[from].peer.signal(signal); } catch (e) { console.error('Signal error', e); }
           break;
-
-        case 'chat':
-          logChatMessage(msg.fromNickname || msg.from, msg.message, false);
-          break;
-
-        default:
-          console.warn('Unknown message type:', msg.type);
       }
     };
 
     ws.onclose = () => setStatus(false);
-    ws.onerror = err => console.error('WebSocket error:', err);
+    ws.onerror = (err) => console.error('WebSocket error:', err);
   }
 
-  function sendSignal(toUid, signalData) {
+  function sendSignal(toUid, data) {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'signal', to: toUid, from: uid, signal: signalData }));
+      ws.send(JSON.stringify({ type: 'signal', to: toUid, signal: data }));
     }
   }
 
   function createPeerConnection(otherUid, initiator) {
     if (peers[otherUid]) return;
-    const newPeer = new SimplePeer({ initiator, trickle: false });
-    peers[otherUid] = { peer: newPeer, nickname: null };
 
-    newPeer.on('signal', data => sendSignal(otherUid, data));
+    const peer = new SimplePeer({ initiator, trickle: false });
+    peers[otherUid] = { peer, nickname: null, connected: false };
 
-    newPeer.on('connect', () => {
+    messageQueue[otherUid] = [];
+
+    peer.on('signal', data => sendSignal(otherUid, data));
+
+    peer.on('connect', () => {
+      peers[otherUid].connected = true;
       logSystemMessage(`Connected to peer ${otherUid}`);
-      newPeer.send(JSON.stringify({ type: 'nickname', nickname }));
+      peer.send(JSON.stringify({ type: 'nickname', nickname }));
+
+      // flush queued messages
+      messageQueue[otherUid].forEach(msg => peer.send(msg));
+      messageQueue[otherUid] = [];
     });
 
-    newPeer.on('data', data => {
+    peer.on('data', data => {
       let msgObj = null;
       try { msgObj = JSON.parse(data.toString()); } catch {}
       if (msgObj?.type === 'nickname') {
@@ -136,37 +138,47 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    newPeer.on('close', () => {
+    peer.on('close', () => {
       const peerNickname = peers[otherUid]?.nickname || 'Unknown';
       logSystemMessage(`Disconnected from peer ${otherUid} (${peerNickname})`);
       delete peers[otherUid];
     });
 
-    newPeer.on('error', err => console.error('Peer error:', err));
+    peer.on('error', err => console.error('Peer error:', err));
   }
 
-  function joinRoom(isHost = true) {
+  function joinRoomSendWS() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setTimeout(joinRoomSendWS, 100);
+      return;
+    }
+    ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId, isPublic }));
+  }
+
+  function joinRoomAsHost() {
     nickname = nicknameInput.value.trim();
     if (!nickname) return alert('Enter a nickname.');
 
-    roomId = isHost ? (roomIdInput.value.trim() || Math.random().toString(36).substring(2,10))
-                    : connectToRoomInput.value.trim();
+    roomId = roomIdInput.value.trim() || Math.random().toString(36).substring(2,10);
+    roomIdInput.value = roomId;
+    isPublic = publicToggle.checked;
+
+    joinRoomSendWS();
+    logSystemMessage(`Hosting room: ${roomId} (${isPublic ? 'Public' : 'Private'})`);
+    messageInput.disabled = false;
+    sendBtn.disabled = false;
+  }
+
+  function joinRoomAsPeer() {
+    nickname = nicknameInput.value.trim();
+    if (!nickname) return alert('Enter a nickname.');
+
+    roomId = connectToRoomInput.value.trim();
     if (!roomId) return alert('Enter a Room ID.');
+    isPublic = false;
 
-    isPublic = isHost ? publicToggle.checked : false;
-
-    if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
-
-    const sendJoin = () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'join', roomId, uid, nickname, isPublic }));
-        logSystemMessage(`${isHost ? 'Hosting' : 'Joining'} room: ${roomId} as ${nickname}`);
-      } else {
-        setTimeout(sendJoin, 100);
-      }
-    };
-    sendJoin();
-
+    joinRoomSendWS();
+    logSystemMessage(`Joining room: ${roomId} as ${nickname}`);
     messageInput.disabled = false;
     sendBtn.disabled = false;
   }
@@ -177,19 +189,15 @@ document.addEventListener('DOMContentLoaded', () => {
     logChatMessage('Me', msg, true);
     messageInput.value = '';
 
-    Object.values(peers).forEach(({ peer }) => {
-      if (peer.connected) peer.send(msg);
+    Object.entries(peers).forEach(([peerUid, { peer, connected }]) => {
+      if (connected) peer.send(msg);
+      else messageQueue[peerUid].push(msg);
     });
-
-    // optionally send to server (not storing history)
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'chat', roomId, from: uid, fromNickname: nickname, message: msg }));
-    }
   }
 
   function disconnectFromRoom() {
     Object.values(peers).forEach(({ peer }) => peer.destroy());
-    for (const key in peers) delete peers[key];
+    for (const k in peers) delete peers[k];
 
     if (ws && ws.readyState === WebSocket.OPEN && roomId) {
       ws.send(JSON.stringify({ type: 'leave', uid, roomId }));
@@ -203,11 +211,10 @@ document.addEventListener('DOMContentLoaded', () => {
     userList.innerHTML = '';
   }
 
-  // ---------------- Setup ----------------
   connectWebSocket();
 
-  hostBtn.addEventListener('click', () => joinRoom(true));
-  joinBtn.addEventListener('click', () => joinRoom(false));
+  hostBtn.addEventListener('click', joinRoomAsHost);
+  joinBtn.addEventListener('click', joinRoomAsPeer);
   disconnectBtn.addEventListener('click', disconnectFromRoom);
 
   sendBtn.addEventListener('click', sendMessage);
@@ -217,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
   messageInput.disabled = true;
   sendBtn.disabled = true;
 
-  // periodically refresh public room list
+  // periodically request public room list
   setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'listRooms' }));
   }, 3000);
