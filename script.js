@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const publicToggle = document.getElementById('publicRoomToggle');
   const publicRoomList = document.getElementById('publicRoomList');
   const userList = document.getElementById('userList');
+
   const serverStatusEl = document.getElementById('serverStatus');
   const peersStatusEl = document.getElementById('peersStatus');
 
@@ -21,13 +22,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let nickname = null;
   let isPublic = false;
   const peers = {};
+  const signalQueue = {};
 
   function setServerStatus(connected) {
     serverStatusEl.textContent = `Connected to server: ${connected ? '✅ Success' : '❌ Fail'}`;
   }
+
   function setPeersStatus(allPeersConnected) {
     peersStatusEl.textContent = `Connected to other users: ${allPeersConnected ? '✅ Success' : '❌ Fail'}`;
   }
+
   function updatePeersStatus() {
     const anyConnected = Object.values(peers).some(p => p.peer.connected);
     setPeersStatus(anyConnected);
@@ -86,12 +90,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         case 'roomPeers':
           updateUserList(msg.peers);
+          msg.peers.forEach(p => {
+            if (p.uid !== uid && !peers[p.uid]) {
+              const initiator = uid < p.uid;
+              createPeerConnection(p.uid, initiator);
+              if (signalQueue[p.uid]) {
+                signalQueue[p.uid].forEach(sig => peers[p.uid].peer.signal(sig));
+                delete signalQueue[p.uid];
+              }
+            }
+          });
           break;
 
         case 'signal':
           const { from, signal } = msg;
-          if (!peers[from]) createPeerConnection(from, false);
-          try { peers[from].peer.signal(signal); } catch (e) { console.error(e); }
+          if (!peers[from]) {
+            if (!signalQueue[from]) signalQueue[from] = [];
+            signalQueue[from].push(signal);
+          } else {
+            try { peers[from].peer.signal(signal); } catch (e) { console.error(e); }
+          }
           break;
 
         case 'chat':
@@ -113,11 +131,13 @@ document.addEventListener('DOMContentLoaded', () => {
     peers[otherUid] = { peer: newPeer, nickname: null };
 
     newPeer.on('signal', data => sendSignal(otherUid, data));
+
     newPeer.on('connect', () => {
       logSystemMessage(`Connected to peer ${otherUid}`);
       updatePeersStatus();
       newPeer.send(JSON.stringify({ type: 'nickname', nickname }));
     });
+
     newPeer.on('data', data => {
       let msgObj = null;
       try { msgObj = JSON.parse(data.toString()); } catch {}
@@ -125,15 +145,18 @@ document.addEventListener('DOMContentLoaded', () => {
         peers[otherUid].nickname = msgObj.nickname;
         logSystemMessage(`Peer ${otherUid} set nickname: ${msgObj.nickname}`);
       } else {
-        logChatMessage(peers[otherUid].nickname || otherUid, data.toString(), false);
+        const senderName = peers[otherUid].nickname || otherUid;
+        logChatMessage(senderName, data.toString(), false);
       }
       updatePeersStatus();
     });
+
     newPeer.on('close', () => {
       delete peers[otherUid];
       logSystemMessage(`Disconnected from peer ${otherUid}`);
       updatePeersStatus();
     });
+
     newPeer.on('error', err => console.error(err));
   }
 
@@ -144,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isHost) {
       roomId = roomIdInput.value.trim() || Math.random().toString(36).substring(2,10);
       isPublic = publicToggle.checked;
+      roomIdInput.value = roomId;
     } else {
       roomId = connectToRoomInput.value.trim();
       isPublic = false;
@@ -188,6 +212,14 @@ document.addEventListener('DOMContentLoaded', () => {
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
 
-  // remove listRooms interval; publicRooms now broadcasts automatically
+  // Periodically update public room list
+  setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) broadcastPublicRoomsRequest();
+  }, 10000);
+
+  function broadcastPublicRoomsRequest() {
+    ws.send(JSON.stringify({ type: 'listRooms' }));
+  }
+
   window.addEventListener('beforeunload', disconnectFromRoom);
 });
