@@ -10,87 +10,85 @@
 <body>
   <div class="main-container">
     <div class="instructions">
-      <h2>How to Chat</h2>
-      <p><strong>Server Note:</strong> If the server is sleeping, it may take up to a minute to wake up when you load this page.</p>
+      <h2>P2P Chat</h2>
       
-      <h3>🚀 Quick Start</h3>
-      <ol>
-        <li><strong>Enter your nickname</strong></li>
-        <li><strong>To create a room:</strong> Type a room name and click "Host Room"</li>
-        <li><strong>To join a room:</strong> Type an existing room name and click "Connect"</li>
-        <li>Share the room name with others so they can join you</li>
-      </ol>
+      <div class="info-box">
+        <strong>💡 Quick Start</strong>
+        <ol>
+          <li>Enter your nickname</li>
+          <li>Join the Public room or create your own</li>
+          <li>Start chatting!</li>
+        </ol>
+      </div>
 
-      <h3>📋 Available Rooms</h3>
-      <p><strong>Public Room (Always Available):</strong></p>
-      <ul>
-        <li>Public: <span id="count-public">Users: 0</span></li>
-      </ul>
-      
-      <p><strong>Other Public Rooms:</strong></p>
-      <ul id="publicRoomList"></ul>
+      <div class="info-box">
+        <strong>🏠 Public Room</strong>
+        <p>Always open - join anytime!</p>
+        <ul>
+          <li>Public: <span id="count-public">Users: 0</span></li>
+        </ul>
+      </div>
 
-      <h3>🎯 Room Types</h3>
-      <ul>
-        <li><strong>Public Rooms:</strong> Visible to everyone, anyone can join</li>
-        <li><strong>Private Rooms:</strong> Only people with the room name can join</li>
-        <li><strong>"Public" room:</strong> Always public, great for meeting new people</li>
-      </ul>
+      <div class="info-box">
+        <strong>📋 Other Public Rooms</strong>
+        <ul id="publicRoomList">
+          <li style="color: #888; font-style: italic;">No other rooms yet</li>
+        </ul>
+      </div>
 
-      <h3>💡 Pro Tips</h3>
-      <ul>
-        <li>Use simple room names like "games", "music", or "help"</li>
-        <li>Check the user list to see who's in your room</li>
-        <li>Click "Disconnect" when you're done chatting</li>
-      </ul>
+      <div class="info-box">
+        <strong>🎯 Create Your Own Room</strong>
+        <p>Perfect for private conversations with friends</p>
+      </div>
     </div>
 
     <div class="chat-container">
       <div id="statusContainer">
-        <strong>Status:</strong><br />
-        <span id="serverStatus"></span><br />
-        <span id="peersStatus"></span>
+        <strong>Status</strong><br />
+        <span id="serverStatus">Connecting...</span><br />
+        <span id="peersStatus">Waiting to connect</span>
       </div>
 
-      <div>
-        <label>Your Nickname:</label><br />
+      <div class="input-group">
+        <label>Your Nickname</label>
         <input type="text" id="nicknameInput" placeholder="Enter your nickname" />
       </div>
 
-      <div style="margin-top: 10px;">
-        <label>🎪 Host a New Room:</label><br />
-        <input type="text" id="roomId" placeholder="Enter room name" />
-        <button id="hostBtn">Host Room</button>
-        <label>
-          <input type="checkbox" id="publicRoomToggle"> Make room public
-        </label>
-        <div style="font-size: 0.8em; color: #888; margin-top: 5px;">
-          ✓ Public rooms appear in the room list<br>
-          ✓ Private rooms are invite-only
-        </div>
+      <div class="input-group">
+        <label>Join Public Room</label>
+        <button id="joinPublicBtn" style="width: 100%; margin-top: 5px;">Join Public Room</button>
+        <div class="help-text">Always available</div>
       </div>
 
-      <div style="margin-top: 20px;">
-        <label>🔗 Connect to Existing Room:</label><br />
-        <input type="text" id="connectToRoom" placeholder="Enter room name to join" />
-        <button id="connectBtn">Connect</button>
-        <div style="font-size: 0.8em; color: #888; margin-top: 5px;">
-          ✓ Room must already exist<br>
-          ✓ Ask friends for their room name
+      <div class="input-group">
+        <label>Create New Room</label>
+        <input type="text" id="roomId" placeholder="Room name" />
+        <button id="hostBtn">Create Room</button>
+        <div class="checkbox-group">
+          <input type="checkbox" id="publicRoomToggle"> 
+          <label for="publicRoomToggle">List publicly</label>
         </div>
+        <div class="help-text">Share the room name with friends</div>
+      </div>
+
+      <div class="input-group">
+        <label>Join Existing Room</label>
+        <input type="text" id="connectToRoom" placeholder="Enter room name" />
+        <button id="connectBtn">Join Room</button>
+        <div class="help-text">Room must already exist</div>
       </div>
 
       <div id="chat"></div>
 
-      <div style="margin-top:10px;">
+      <div class="chat-controls">
         <input type="text" id="messageInput" placeholder="Type your message..." disabled />
         <button id="sendBtn" disabled>Send</button>
-        <button id="disconnectBtn">Disconnect</button>
+        <button id="disconnectBtn">Leave Room</button>
       </div>
     </div>
 
     <div class="userListPane">
-      <h3>👥 Connected Users</h3>
+      <h3>👥 In This Room</h3>
       <ul id="userList"></ul>
     </div>
   </div>
