@@ -53,9 +53,12 @@ function joinRoom(socket, roomId, uid, nickname, isPublic) {
   if (!rooms[roomId]) {
     // Create new room with the specified public/private status
     rooms[roomId] = { public: isPublic, peers: {} };
+  } else {
+    // CRITICAL FIX: If room exists and is named "Public", ensure it's public
+    if (roomId === 'Public') {
+      rooms[roomId].public = true;
+    }
   }
-  // If room exists, don't change its public/private status
-  // Users can only join existing rooms regardless of their isPublic flag
 
   rooms[roomId].peers[uid] = { socket, nickname };
 
