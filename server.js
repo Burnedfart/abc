@@ -1,86 +1,123 @@
 const WebSocket = require('ws');
 
-const server = new WebSocket.Server({ port: process.env.PORT || 3000 });
+const PORT = process.env.PORT || 3000;
+const server = new WebSocket.Server({ port: PORT });
 
-const rooms = {}; // { roomId: { public: bool, peers: { uid: { nickname, socket } } } }
+console.log(`Signaling server running on port ${PORT}`);
 
-function broadcastToRoom(roomId, message, excludeSocket = null) {
-  if (!rooms[roomId]) return;
-  Object.values(rooms[roomId].peers).forEach(({ socket }) => {
-    if (socket !== excludeSocket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
+// In-memory rooms structure
+// rooms = { roomId: { public: true/false, peers: { uid: { nickname, socket } } } }
+const rooms = {};
+
+// ---------------- Utility functions ----------------
+
+function broadcastPublicRooms() {
+  const publicRooms = Object.entries(rooms)
+    .filter(([_, room]) => room.public)
+    .map(([id, room]) => ({ id, count: Object.keys(room.peers).length }));
+
+  server.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'publicRooms', rooms: publicRooms }));
     }
   });
 }
 
-server.on('connection', (socket) => {
+function broadcastRoomPeers(roomId) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  const peerList = Object.entries(room.peers).map(([uid, info]) => ({
+    uid,
+    nickname: info.nickname
+  }));
+
+  Object.values(room.peers).forEach(({ socket }) => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'roomPeers', peers: peerList }));
+    }
+  });
+}
+
+// ---------------- Room management ----------------
+
+function joinRoom(socket, roomId, uid, nickname, isPublic) {
+  if (!rooms[roomId]) {
+    rooms[roomId] = { public: isPublic, peers: {} };
+  }
+
+  // First peer sets the public flag; later peers cannot overwrite it
+  rooms[roomId].public = rooms[roomId].peers && Object.keys(rooms[roomId].peers).length > 0
+    ? rooms[roomId].public
+    : isPublic;
+
+  rooms[roomId].peers[uid] = { socket, nickname };
+
+  broadcastPublicRooms();
+  broadcastRoomPeers(roomId);
+}
+
+function leaveRoom(uid) {
+  for (const [roomId, room] of Object.entries(rooms)) {
+    if (room.peers[uid]) {
+      delete room.peers[uid];
+
+      broadcastRoomPeers(roomId);
+      if (Object.keys(room.peers).length === 0) {
+        delete rooms[roomId]; // optionally, use a timeout instead
+      }
+      broadcastPublicRooms();
+    }
+  }
+}
+
+// ---------------- WebSocket signaling ----------------
+
+server.on('connection', socket => {
   let currentRoom = null;
-  let uid = null;
+  let currentUid = null;
 
-  socket.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+  socket.on('message', msg => {
+    let data;
+    try { data = JSON.parse(msg); } catch { return; }
 
-    switch (msg.type) {
+    const { type } = data;
+
+    switch (type) {
+      // ---------------- Room join ----------------
       case 'join':
-        uid = msg.uid;
-        currentRoom = msg.roomId;
-        const nickname = msg.nickname || 'Anonymous';
-        const isPublic = !!msg.public;
-
-        if (!rooms[currentRoom]) rooms[currentRoom] = { public: isPublic, peers: {} };
-        rooms[currentRoom].peers[uid] = { nickname, socket };
-        rooms[currentRoom].public = isPublic;
-
-        // Notify all peers in the room about the updated user list
-        broadcastToRoom(currentRoom, {
-          type: 'updateUsers',
-          users: Object.entries(rooms[currentRoom].peers).map(([id, p]) => ({ uid: id, nickname: p.nickname }))
-        });
-
-        console.log(`${nickname} (${uid}) joined room ${currentRoom}`);
+        const { roomId, uid, nickname, isPublic } = data;
+        currentRoom = roomId;
+        currentUid = uid;
+        joinRoom(socket, roomId, uid, nickname, isPublic);
         break;
 
+      // ---------------- Signal to peer ----------------
       case 'signal':
-        // { type: 'signal', to: uid, from: uid, data: ... }
-        if (currentRoom && rooms[currentRoom].peers[msg.to]) {
-          const target = rooms[currentRoom].peers[msg.to].socket;
-          if (target.readyState === WebSocket.OPEN) target.send(JSON.stringify({ type: 'signal', from: msg.from, data: msg.data }));
+        const { to, signal } = data;
+        const room = rooms[currentRoom];
+        if (room && room.peers[to]) {
+          const targetSocket = room.peers[to].socket;
+          if (targetSocket.readyState === WebSocket.OPEN) {
+            targetSocket.send(JSON.stringify({
+              type: 'signal',
+              from: currentUid,
+              signal
+            }));
+          }
         }
-        break;
-
-      case 'chat':
-        // { type: 'chat', message, from }
-        if (currentRoom) {
-          broadcastToRoom(currentRoom, { type: 'chat', message: msg.message, from: msg.from }, socket);
-        }
-        break;
-
-      case 'listRooms':
-        // return public rooms
-        const publicRooms = Object.entries(rooms)
-          .filter(([id, r]) => r.public)
-          .map(([id, r]) => ({ id, count: Object.keys(r.peers).length }));
-        socket.send(JSON.stringify({ type: 'publicRooms', rooms: publicRooms }));
         break;
 
       default:
-        console.warn('Unknown message type:', msg.type);
+        console.warn('Unknown message type:', type);
     }
   });
 
   socket.on('close', () => {
-    if (currentRoom && rooms[currentRoom]) {
-      delete rooms[currentRoom].peers[uid];
-      // Notify remaining peers
-      broadcastToRoom(currentRoom, {
-        type: 'updateUsers',
-        users: Object.entries(rooms[currentRoom].peers).map(([id, p]) => ({ uid: id, nickname: p.nickname }))
-      });
-      if (Object.keys(rooms[currentRoom].peers).length === 0) delete rooms[currentRoom];
-      console.log(`${uid} disconnected from room ${currentRoom}`);
-    }
+    leaveRoom(currentUid);
+  });
+
+  socket.on('error', () => {
+    leaveRoom(currentUid);
   });
 });
-
-console.log('Multi-room signaling server running.');
