@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const hostBtn = document.getElementById('hostBtn');
   const joinBtn = document.getElementById('connectBtn');
-  const disconnectBtn = document.getElementById('disconnectBtn'); // new button
+  const disconnectBtn = document.getElementById('disconnectBtn'); // manual disconnect
   const nicknameInput = document.getElementById('nicknameInput');
   const roomIdInput = document.getElementById('roomId');
   const connectToRoomInput = document.getElementById('connectToRoom');
@@ -9,18 +9,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const sendBtn = document.getElementById('sendBtn');
   const connectionStatus = document.getElementById('connection-status');
   const chat = document.getElementById('chat');
-  const copyRoomIdBtn = document.getElementById('copyRoomId');
   const publicToggle = document.getElementById('publicRoomToggle');
   const publicRoomList = document.getElementById('publicRoomList');
   const userList = document.getElementById('userList');
 
-  const WS_ENDPOINT = "wss://p2pchat-r8so.onrender.com"; // replace with your Render WebSocket
+  const WS_ENDPOINT = "wss://p2pchat-r8so.onrender.com";
   let ws;
   let roomId = null;
-  let uid = null;
+  let uid = Math.random().toString(36).substring(2,10);
   let nickname = null;
   let isPublic = false;
-
   const peers = {};
 
   function setStatus(connected) {
@@ -47,17 +45,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateUserList(peersInRoom) {
     userList.innerHTML = '';
-    for (const { uid, nickname } of peersInRoom) {
+    peersInRoom.forEach(({ uid, nickname }) => {
       const li = document.createElement('li');
       li.textContent = `${nickname || 'No nickname'} (${uid})`;
       userList.appendChild(li);
-    }
+    });
   }
 
   function connectWebSocket() {
     ws = new WebSocket(WS_ENDPOINT);
 
-    ws.onopen = () => setStatus(true);
+    ws.onopen = () => {
+      setStatus(true);
+      logSystemMessage('Connected to signaling server.');
+      if (roomId && nickname) joinRoom(); // send join if already set
+    };
 
     ws.onmessage = (event) => {
       let msg;
@@ -77,6 +79,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         case 'roomPeers':
           updateUserList(msg.peers);
+          msg.peers.forEach(p => {
+            if (p.uid !== uid && !peers[p.uid]) {
+              const initiator = uid < p.uid;
+              createPeerConnection(p.uid, initiator);
+            }
+          });
           break;
 
         case 'signal':
@@ -84,16 +92,23 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!peers[from]) createPeerConnection(from, false);
           try { peers[from].peer.signal(signal); } catch (e) { console.error('Signal error', e); }
           break;
+
+        case 'chat':
+          logChatMessage(msg.fromNickname || msg.from, msg.message, false);
+          break;
+
+        default:
+          console.warn('Unknown message type:', msg.type);
       }
     };
 
     ws.onclose = () => setStatus(false);
-    ws.onerror = (err) => console.error('WebSocket error:', err);
+    ws.onerror = err => console.error('WebSocket error:', err);
   }
 
   function sendSignal(toUid, signalData) {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'signal', to: toUid, signal: signalData }));
+      ws.send(JSON.stringify({ type: 'signal', to: toUid, from: uid, signal: signalData }));
     }
   }
 
@@ -130,29 +145,30 @@ document.addEventListener('DOMContentLoaded', () => {
     newPeer.on('error', err => console.error('Peer error:', err));
   }
 
-  function joinRoomAsHost() {
+  function joinRoom(isHost = true) {
     nickname = nicknameInput.value.trim();
     if (!nickname) return alert('Enter a nickname.');
 
-    const inputRoomId = roomIdInput.value.trim();
-    roomId = inputRoomId || Math.random().toString(36).substring(2,10);
-    roomIdInput.value = roomId;
+    roomId = isHost ? (roomIdInput.value.trim() || Math.random().toString(36).substring(2,10))
+                    : connectToRoomInput.value.trim();
+    if (!roomId) return alert('Enter a Room ID.');
 
-    isPublic = publicToggle.checked;
+    isPublic = isHost ? publicToggle.checked : false;
 
-    ws.send(JSON.stringify({ type: 'join', roomId, uid, nickname, isPublic }));
-    logSystemMessage(`Hosting room: ${roomId} (${isPublic ? 'Public' : 'Private'})`);
-  }
+    if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
 
-  function joinRoomAsPeer() {
-    nickname = nicknameInput.value.trim();
-    if (!nickname) return alert('Enter a nickname.');
+    const sendJoin = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'join', roomId, uid, nickname, isPublic }));
+        logSystemMessage(`${isHost ? 'Hosting' : 'Joining'} room: ${roomId} as ${nickname}`);
+      } else {
+        setTimeout(sendJoin, 100);
+      }
+    };
+    sendJoin();
 
-    roomId = connectToRoomInput.value.trim();
-    if (!roomId) return alert('Enter a Room ID to connect.');
-
-    ws.send(JSON.stringify({ type: 'join', roomId, uid, nickname, isPublic: false }));
-    logSystemMessage(`Joining room: ${roomId} as ${nickname}`);
+    messageInput.disabled = false;
+    sendBtn.disabled = false;
   }
 
   function sendMessage() {
@@ -164,15 +180,18 @@ document.addEventListener('DOMContentLoaded', () => {
     Object.values(peers).forEach(({ peer }) => {
       if (peer.connected) peer.send(msg);
     });
+
+    // optionally send to server (not storing history)
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'chat', roomId, from: uid, fromNickname: nickname, message: msg }));
+    }
   }
 
   function disconnectFromRoom() {
-    // Close all peer connections
     Object.values(peers).forEach(({ peer }) => peer.destroy());
     for (const key in peers) delete peers[key];
 
-    // Notify server
-    if (ws && ws.readyState === WebSocket.OPEN && roomId && uid) {
+    if (ws && ws.readyState === WebSocket.OPEN && roomId) {
       ws.send(JSON.stringify({ type: 'leave', uid, roomId }));
     }
 
@@ -185,35 +204,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ---------------- Setup ----------------
-  uid = Math.random().toString(36).substring(2,10); // lightweight UID
-
   connectWebSocket();
 
-  hostBtn.addEventListener('click', () => {
-    joinRoomAsHost();
-    messageInput.disabled = false;
-    sendBtn.disabled = false;
-  });
-
-  joinBtn.addEventListener('click', () => {
-    joinRoomAsPeer();
-    messageInput.disabled = false;
-    sendBtn.disabled = false;
-  });
-
+  hostBtn.addEventListener('click', () => joinRoom(true));
+  joinBtn.addEventListener('click', () => joinRoom(false));
   disconnectBtn.addEventListener('click', disconnectFromRoom);
 
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
 
-  copyRoomIdBtn.addEventListener('click', () => {
-    if (!roomId) return alert('No Room ID to copy.');
-    navigator.clipboard.writeText(roomId).then(() => alert(`Copied Room ID: ${roomId}`));
-  });
-
   setStatus(false);
   messageInput.disabled = true;
   sendBtn.disabled = true;
+
+  // periodically refresh public room list
+  setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'listRooms' }));
+  }, 3000);
 
   window.addEventListener('beforeunload', disconnectFromRoom);
 });
