@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const publicToggle = document.getElementById('publicRoomToggle');
   const publicRoomList = document.getElementById('publicRoomList');
   const userList = document.getElementById('userList');
-
   const serverStatusEl = document.getElementById('serverStatus');
   const peersStatusEl = document.getElementById('peersStatus');
 
@@ -26,11 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function setServerStatus(connected) {
     serverStatusEl.textContent = `Connected to server: ${connected ? '✅ Success' : '❌ Fail'}`;
   }
-
   function setPeersStatus(allPeersConnected) {
     peersStatusEl.textContent = `Connected to other users: ${allPeersConnected ? '✅ Success' : '❌ Fail'}`;
   }
-
   function updatePeersStatus() {
     const anyConnected = Object.values(peers).some(p => p.peer.connected);
     setPeersStatus(anyConnected);
@@ -67,7 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ws.onopen = () => {
       setServerStatus(true);
-      ws.send(JSON.stringify({ type: 'listRooms' })); 
     };
     ws.onclose = () => setServerStatus(false);
     ws.onerror = () => setServerStatus(false);
@@ -117,13 +113,11 @@ document.addEventListener('DOMContentLoaded', () => {
     peers[otherUid] = { peer: newPeer, nickname: null };
 
     newPeer.on('signal', data => sendSignal(otherUid, data));
-
     newPeer.on('connect', () => {
       logSystemMessage(`Connected to peer ${otherUid}`);
       updatePeersStatus();
       newPeer.send(JSON.stringify({ type: 'nickname', nickname }));
     });
-
     newPeer.on('data', data => {
       let msgObj = null;
       try { msgObj = JSON.parse(data.toString()); } catch {}
@@ -131,18 +125,15 @@ document.addEventListener('DOMContentLoaded', () => {
         peers[otherUid].nickname = msgObj.nickname;
         logSystemMessage(`Peer ${otherUid} set nickname: ${msgObj.nickname}`);
       } else {
-        const senderName = peers[otherUid].nickname || otherUid;
-        logChatMessage(senderName, data.toString(), false);
+        logChatMessage(peers[otherUid].nickname || otherUid, data.toString(), false);
       }
       updatePeersStatus();
     });
-
     newPeer.on('close', () => {
       delete peers[otherUid];
       logSystemMessage(`Disconnected from peer ${otherUid}`);
       updatePeersStatus();
     });
-
     newPeer.on('error', err => console.error(err));
   }
 
@@ -197,10 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
 
-  // Periodically request public room list
-  setInterval(() => {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'listRooms' }));
-  }, 10000);
-
+  // remove listRooms interval; publicRooms now broadcasts automatically
   window.addEventListener('beforeunload', disconnectFromRoom);
 });
