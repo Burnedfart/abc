@@ -57,6 +57,15 @@ function joinRoom(socket, roomId, uid, nickname, isPublic) {
 function leaveRoom(uid) {
   for (const [roomId, room] of Object.entries(rooms)) {
     if (room.peers[uid]) {
+      
+      Object.values(room.peers).forEach(({ socket }) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: 'user-left',
+            uid
+          }));
+        }
+      });
       delete room.peers[uid];
 
       broadcastRoomPeers(roomId);
