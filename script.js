@@ -66,11 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
       li.textContent = `${nickname || 'No nickname'} (${uid})`;
       userList.appendChild(li);
     });
-    if (roomId === 'Public') {
-      const countEl = document.getElementById('count-public');
-      const totalUsers = peersInRoom.length; 
-      countEl.textContent = `Users: ${totalUsers}`;
-    }
     updatePeersStatus();
   }
 
@@ -94,7 +89,20 @@ document.addEventListener('DOMContentLoaded', () => {
               li.textContent = `${r.id}: ${r.count} users`;
               publicRoomList.appendChild(li);
             }
+            
+            // Update the hardcoded Public room count with server-authoritative data
+            if (r.id === 'Public') {
+              const countEl = document.getElementById('count-public');
+              countEl.textContent = `Users: ${r.count}`;
+            }
           });
+          
+          // If Public room doesn't exist in publicRooms, set count to 0
+          const publicRoomExists = msg.rooms.some(r => r.id === 'Public');
+          if (!publicRoomExists) {
+            const countEl = document.getElementById('count-public');
+            countEl.textContent = 'Users: 0';
+          }
           break;
 
         case 'roomPeers':
