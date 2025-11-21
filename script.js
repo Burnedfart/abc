@@ -199,49 +199,88 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!nickname) nickname = nicknameInput.value.trim();
     if (!nickname) return alert('Enter a nickname.');
 
-    roomId = roomIdInput.value.trim() || Math.random().toString(36).substring(2,10);
+    const newRoomId = roomIdInput.value.trim() || Math.random().toString(36).substring(2,10);
     isPublic = publicToggle.checked;
-    roomIdInput.value = roomId;
+    roomIdInput.value = newRoomId;
 
-    if (!roomId) return alert('Enter a Room ID.');
+    if (!newRoomId) return alert('Enter a Room ID.');
     if (!ws || ws.readyState !== WebSocket.OPEN) return setTimeout(() => hostRoom(), 100);
 
-    ws.send(JSON.stringify({ type: 'host', uid, nickname, roomId, isPublic }));
-    logSystemMessage(`Creating room: ${roomId}`);
-    messageInput.disabled = false;
-    sendBtn.disabled = false;
+    // FIX: Always disconnect from current room first
+    if (roomId) {
+      disconnectFromRoom();
+      setTimeout(() => {
+        roomId = newRoomId;
+        ws.send(JSON.stringify({ type: 'host', uid, nickname, roomId: newRoomId, isPublic }));
+        logSystemMessage(`Creating room: ${newRoomId}`);
+        messageInput.disabled = false;
+        sendBtn.disabled = false;
+      }, 100);
+    } else {
+      roomId = newRoomId;
+      ws.send(JSON.stringify({ type: 'host', uid, nickname, roomId: newRoomId, isPublic }));
+      logSystemMessage(`Creating room: ${newRoomId}`);
+      messageInput.disabled = false;
+      sendBtn.disabled = false;
+    }
   }
 
   function joinRoom() {
     if (!nickname) nickname = nicknameInput.value.trim();
     if (!nickname) return alert('Enter a nickname.');
 
-    roomId = connectToRoomInput.value.trim();
+    const newRoomId = connectToRoomInput.value.trim();
     isPublic = false;
 
-    if (!roomId) return alert('Enter a Room ID to join.');
+    if (!newRoomId) return alert('Enter a Room ID to join.');
     if (!ws || ws.readyState !== WebSocket.OPEN) return setTimeout(() => joinRoom(), 100);
 
-    ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId, isPublic }));
-    logSystemMessage(`Attempting to join room: ${roomId}`);
-    messageInput.disabled = false;  // FIX: Enable chat inputs
-    sendBtn.disabled = false;       // FIX: Enable send button
+    // FIX: Always disconnect from current room first
+    if (roomId) {
+      disconnectFromRoom();
+      setTimeout(() => {
+        roomId = newRoomId;
+        ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId: newRoomId, isPublic }));
+        logSystemMessage(`Joining room: ${newRoomId}`);
+        messageInput.disabled = false;
+        sendBtn.disabled = false;
+      }, 100);
+    } else {
+      roomId = newRoomId;
+      ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId: newRoomId, isPublic }));
+      logSystemMessage(`Joining room: ${newRoomId}`);
+      messageInput.disabled = false;
+      sendBtn.disabled = false;
+    }
   }
 
   function joinPublicRoom() {
     if (!nickname) nickname = nicknameInput.value.trim();
     if (!nickname) return alert('Enter a nickname.');
     
-    roomId = 'Public';
+    const newRoomId = 'Public';
     
     if (!ws || ws.readyState !== WebSocket.OPEN) return setTimeout(() => {
       joinPublicRoom();
     }, 100);
     
-    ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId, isPublic: true }));
-    logSystemMessage('Joining Public room');
-    messageInput.disabled = false;
-    sendBtn.disabled = false;
+    // FIX: Always disconnect from current room first
+    if (roomId && roomId !== newRoomId) {
+      disconnectFromRoom();
+      setTimeout(() => {
+        roomId = newRoomId;
+        ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId: newRoomId, isPublic: true }));
+        logSystemMessage('Joining Public room');
+        messageInput.disabled = false;
+        sendBtn.disabled = false;
+      }, 100);
+    } else {
+      roomId = newRoomId;
+      ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId: newRoomId, isPublic: true }));
+      logSystemMessage('Joining Public room');
+      messageInput.disabled = false;
+      sendBtn.disabled = false;
+    }
   }
 
   function sendMessage() {
