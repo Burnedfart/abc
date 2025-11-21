@@ -99,6 +99,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         case 'roomPeers':
           updateUserList(msg.peers);
+          
+          // Handle peer connections/disconnections based on authoritative list
+          const currentPeerIds = new Set(msg.peers.map(p => p.uid));
+          const existingPeerIds = new Set(Object.keys(peers));
+          
+          // Remove peers that are no longer in the room
+          existingPeerIds.forEach(peerId => {
+            if (!currentPeerIds.has(peerId) && peerId !== uid) {
+              if (peers[peerId]) {
+                peers[peerId].peer.destroy();
+                delete peers[peerId];
+                logSystemMessage(`Peer ${peerId} left the room`);
+              }
+            }
+          });
+          
+          // Add new peers
           msg.peers.forEach(p => {
             if (p.uid !== uid && !peers[p.uid]) {
               const initiator = uid < p.uid;
@@ -125,13 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
           logChatMessage(msg.from, msg.message, false);
           break;
 
-        case 'user-left':
-          const gone = msg.uid;
-          if (peers[gone]) {
-            peers[gone].peer.destroy();
-            delete peers[gone];
-          }
-          break;
+        // Removed 'user-left' case since server doesn't send it
       }
     };
   }
@@ -207,17 +218,27 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function disconnectFromRoom() {
+    // Destroy all peer connections
     Object.values(peers).forEach(({ peer }) => peer.destroy());
     for (const key in peers) delete peers[key];
+    
+    // Notify server that we're leaving the room
     if (ws && ws.readyState === WebSocket.OPEN && roomId) {
-      ws.send(JSON.stringify({ type: 'leave', uid, roomId }));
+      ws.send(JSON.stringify({ type: 'leave', uid }));
     }
+    
+    // Clear local state
     roomId = null;
     messageInput.disabled = true;
     sendBtn.disabled = true;
     userList.innerHTML = '';
     updatePeersStatus();
     logSystemMessage('Disconnected from room manually.');
+    
+    // Request updated public rooms to refresh the count display
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'listRooms' }));
+    }
   }
 
   connectWebSocket();
@@ -228,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
 
-  // Periodically request public rooms (optional for UI)
+  // Periodically request public rooms
   setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'listRooms' }));
   }, 4000);
