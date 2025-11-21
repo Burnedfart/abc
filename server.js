@@ -2,10 +2,13 @@ const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const server = new WebSocket.Server({ port: PORT });
+
 console.log(`Signaling server running on port ${PORT}`);
 
-const rooms = {}; // rooms = { roomId: { public: true/false, peers: { uid: { nickname, socket } } } }
+// In-memory rooms
+const rooms = {};
 
+// ---------------- Utility functions ----------------
 function broadcastPublicRooms() {
   const publicRooms = Object.entries(rooms)
     .filter(([_, room]) => room.public)
@@ -34,6 +37,7 @@ function broadcastRoomPeers(roomId) {
   });
 }
 
+// ---------------- Room management ----------------
 function joinRoom(socket, roomId, uid, nickname, isPublic) {
   if (!rooms[roomId]) {
     rooms[roomId] = { public: isPublic, peers: {} };
@@ -53,15 +57,15 @@ function leaveRoom(uid) {
   for (const [roomId, room] of Object.entries(rooms)) {
     if (room.peers[uid]) {
       delete room.peers[uid];
+
       broadcastRoomPeers(roomId);
-      if (Object.keys(room.peers).length === 0) {
-        delete rooms[roomId];
-      }
+      if (Object.keys(room.peers).length === 0) delete rooms[roomId];
       broadcastPublicRooms();
     }
   }
 }
 
+// ---------------- WebSocket signaling ----------------
 server.on('connection', socket => {
   let currentRoom = null;
   let currentUid = null;
@@ -69,6 +73,7 @@ server.on('connection', socket => {
   socket.on('message', msg => {
     let data;
     try { data = JSON.parse(msg); } catch { return; }
+
     const { type } = data;
 
     switch (type) {
@@ -88,10 +93,6 @@ server.on('connection', socket => {
             targetSocket.send(JSON.stringify({ type: 'signal', from, signal }));
           }
         }
-        break;
-
-      case 'leave':
-        leaveRoom(data.uid);
         break;
 
       default:
