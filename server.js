@@ -12,20 +12,18 @@ const rooms = {
 
 // ---------------- Utility functions ----------------
 function broadcastPublicRooms() {
-  const publicRooms = Object.entries(rooms)
-    .filter(([id, room]) => room.public && id !== 'Public') // Exclude Public from other public rooms list
+  const otherPublicRooms = Object.entries(rooms)
+    .filter(([id, room]) => room.public && id !== 'Public')
     .map(([id, room]) => ({ 
       id, 
       count: Object.keys(room.peers).length 
     }));
 
-  // Also include Public room count in the broadcast for clients to use
   const publicRoomData = {
     publicRoomCount: Object.keys(rooms['Public'].peers).length,
-    otherPublicRooms: publicRooms
+    otherPublicRooms: otherPublicRooms
   };
 
-  // Broadcast to ALL connected clients, not just room members
   server.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ 
@@ -45,7 +43,6 @@ function broadcastRoomPeers(roomId) {
     nickname: info.nickname
   }));
 
-  // Broadcast only to clients in this specific room
   Object.values(room.peers).forEach(({ socket }) => {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ 
@@ -60,7 +57,6 @@ function broadcastRoomPeers(roomId) {
 function joinRoom(socket, roomId, uid, nickname, isPublic) {
   // "Public" room is always public and always exists
   if (roomId === 'Public') {
-    // Always join the permanent Public room
     rooms['Public'].peers[uid] = { socket, nickname };
     broadcastRoomPeers('Public');
     broadcastPublicRooms();
@@ -68,10 +64,8 @@ function joinRoom(socket, roomId, uid, nickname, isPublic) {
   }
 
   // Handle other rooms
-  const shouldBePublic = isPublic;
-  
   if (!rooms[roomId]) {
-    rooms[roomId] = { public: shouldBePublic, peers: {} };
+    rooms[roomId] = { public: isPublic, peers: {} };
   }
 
   rooms[roomId].peers[uid] = { socket, nickname };
@@ -85,7 +79,7 @@ function leaveRoom(uid) {
       delete room.peers[uid];
       broadcastRoomPeers(roomId);
       
-      // Never delete the Public room, only delete other empty rooms
+      // Never delete the Public room
       if (roomId !== 'Public' && Object.keys(room.peers).length === 0) {
         delete rooms[roomId];
       }
@@ -111,11 +105,11 @@ server.on('connection', socket => {
       case 'join': {
         const { roomId, uid, nickname, isPublic } = data;
         
-        // For Public room, always allow join (it always exists)
+        // For Public room, always allow join
         if (roomId === 'Public') {
           currentRoom = roomId;
           currentUid = uid;
-          joinRoom(socket, roomId, uid, nickname, true); // Force public for Public room
+          joinRoom(socket, roomId, uid, nickname, true);
           break;
         }
         
@@ -123,7 +117,7 @@ server.on('connection', socket => {
         if (!rooms[roomId]) {
           socket.send(JSON.stringify({ 
             type: 'error', 
-            message: `Room "${roomId}" doesn't exist. Host it first!` 
+            message: `Room "${roomId}" doesn't exist. Create it first!` 
           }));
           break;
         }
@@ -161,11 +155,11 @@ server.on('connection', socket => {
       case 'host': {
         const { roomId, uid, nickname, isPublic } = data;
         
-        // Prevent hosting a room called "Public" since it's permanent
+        // Prevent hosting a room called "Public"
         if (roomId === 'Public') {
           socket.send(JSON.stringify({ 
             type: 'error', 
-            message: `"Public" room is always available. Just click "Connect" to join it!` 
+            message: `"Public" room is always available. Just click "Join Public Room"!` 
           }));
           break;
         }
@@ -194,7 +188,7 @@ server.on('connection', socket => {
   });
 });
 
-// Periodic authoritative update of rooms and peers every 1.5 seconds
+// Periodic authoritative updates
 setInterval(() => {
   Object.keys(rooms).forEach(roomId => {
     broadcastRoomPeers(roomId);
