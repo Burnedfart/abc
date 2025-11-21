@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
               publicRoomList.appendChild(li);
             }
             
-            // Update the hardcoded Public room count with server-authoritative data
+            // Update the hardcoded Public room count
             if (r.id === 'Public') {
               const countEl = document.getElementById('count-public');
               countEl.textContent = `Users: ${r.count}`;
@@ -146,8 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           break;
 
-        case 'chat':
-          logChatMessage(msg.from, msg.message, false);
+        case 'error':
+          logSystemMessage(`Error: ${msg.message}`);
+          alert(msg.message);
           break;
 
         // Removed 'user-left' case since server doesn't send it
@@ -195,26 +196,35 @@ document.addEventListener('DOMContentLoaded', () => {
     newPeer.on('error', err => console.error(err));
   }
 
-  function joinRoom(isHost = false) {
+  function hostRoom() {
     if (!nickname) nickname = nicknameInput.value.trim();
     if (!nickname) return alert('Enter a nickname.');
 
-    if (isHost) {
-      roomId = roomIdInput.value.trim() || Math.random().toString(36).substring(2,10);
-      isPublic = publicToggle.checked;
-      roomIdInput.value = roomId;
-    } else {
-      roomId = connectToRoomInput.value.trim();
-      isPublic = false;
-    }
+    roomId = roomIdInput.value.trim() || Math.random().toString(36).substring(2,10);
+    isPublic = publicToggle.checked;
+    roomIdInput.value = roomId;
 
     if (!roomId) return alert('Enter a Room ID.');
-    if (!ws || ws.readyState !== WebSocket.OPEN) return setTimeout(() => joinRoom(isHost), 100);
+    if (!ws || ws.readyState !== WebSocket.OPEN) return setTimeout(() => hostRoom(), 100);
 
-    ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId, isPublic }));
-    logSystemMessage(`${isHost ? 'Hosting' : 'Joining'} room: ${roomId}`);
+    ws.send(JSON.stringify({ type: 'host', uid, nickname, roomId, isPublic }));
+    logSystemMessage(`Hosting room: ${roomId}`);
     messageInput.disabled = false;
     sendBtn.disabled = false;
+  }
+
+  function joinRoom() {
+    if (!nickname) nickname = nicknameInput.value.trim();
+    if (!nickname) return alert('Enter a nickname.');
+
+    roomId = connectToRoomInput.value.trim();
+    isPublic = false;
+
+    if (!roomId) return alert('Enter a Room ID to join.');
+    if (!ws || ws.readyState !== WebSocket.OPEN) return setTimeout(() => joinRoom(), 100);
+
+    ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId, isPublic }));
+    logSystemMessage(`Attempting to join room: ${roomId}`);
   }
 
   function sendMessage() {
@@ -251,8 +261,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   connectWebSocket();
 
-  hostBtn.addEventListener('click', () => joinRoom(true));
-  joinBtn.addEventListener('click', () => joinRoom(false));
+  hostBtn.addEventListener('click', hostRoom);
+  joinBtn.addEventListener('click', joinRoom);
   disconnectBtn.addEventListener('click', disconnectFromRoom);
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
