@@ -83,6 +83,30 @@ document.addEventListener('DOMContentLoaded', () => {
       switch(msg.type) {
         case 'publicRooms':
           publicRoomList.innerHTML = '';
+  
+          // Update Public room count from server data
+          const countEl = document.getElementById('count-public');
+          countEl.textContent = `Users: ${msg.publicRoomCount || 0}`;
+  
+          // Show other public rooms
+          if (msg.otherPublicRooms && msg.otherPublicRooms.length > 0) {
+            msg.otherPublicRooms.forEach(r => {
+              if (r.count > 0) {
+                const li = document.createElement('li');
+                li.textContent = `${r.id}: ${r.count} users`;
+                publicRoomList.appendChild(li);
+              }
+            });
+          } else {
+              const li = document.createElement('li');
+              li.textContent = 'No other public rooms yet...';
+              li.style.color = '#888';
+              li.style.fontStyle = 'italic';
+              publicRoomList.appendChild(li);
+            }
+          break;
+        case 'publicRooms':
+          publicRoomList.innerHTML = '';
           msg.rooms.forEach(r => {
             if (r.count > 0) {
               const li = document.createElement('li');
