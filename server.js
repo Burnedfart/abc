@@ -50,21 +50,18 @@ function broadcastRoomPeers(roomId) {
 
 // ---------------- Room management ----------------
 function joinRoom(socket, roomId, uid, nickname, isPublic) {
+  // "Public" room is always public, regardless of checkbox
+  const shouldBePublic = (roomId === 'Public') ? true : isPublic;
+  
   if (!rooms[roomId]) {
-    // Create new room with the specified public/private status
-    rooms[roomId] = { public: isPublic, peers: {} };
-  } else {
-    // CRITICAL FIX: If room exists and is named "Public", ensure it's public
-    if (roomId === 'Public') {
-      rooms[roomId].public = true;
-    }
+    rooms[roomId] = { public: shouldBePublic, peers: {} };
   }
 
   rooms[roomId].peers[uid] = { socket, nickname };
 
   // Broadcast updates to all affected clients
   broadcastRoomPeers(roomId);
-  broadcastPublicRooms(); // Update ALL clients with new room counts
+  broadcastPublicRooms();
 }
 
 function leaveRoom(uid) {
@@ -101,6 +98,17 @@ server.on('connection', socket => {
     switch (type) {
       case 'join': {
         const { roomId, uid, nickname, isPublic } = data;
+        
+        // Check if room exists for join attempts
+        if (!rooms[roomId]) {
+          // Room doesn't exist - send error
+          socket.send(JSON.stringify({ 
+            type: 'error', 
+            message: `Room "${roomId}" doesn't exist. Host it first!` 
+          }));
+          break;
+        }
+        
         currentRoom = roomId;
         currentUid = uid;
         joinRoom(socket, roomId, uid, nickname, isPublic);
@@ -131,6 +139,15 @@ server.on('connection', socket => {
         // Send current public rooms to this client
         broadcastPublicRooms();
         break;
+
+      case 'host': {
+        // New host message type for creating rooms
+        const { roomId, uid, nickname, isPublic } = data;
+        currentRoom = roomId;
+        currentUid = uid;
+        joinRoom(socket, roomId, uid, nickname, isPublic);
+        break;
+      }
 
       default:
         console.warn('Unknown message type:', type);
