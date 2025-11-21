@@ -1,4 +1,3 @@
-// server.js
 const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 3000;
@@ -13,11 +12,18 @@ const rooms = {};
 function broadcastPublicRooms() {
   const publicRooms = Object.entries(rooms)
     .filter(([_, room]) => room.public)
-    .map(([id, room]) => ({ id, count: Object.keys(room.peers).length }));
+    .map(([id, room]) => ({ 
+      id, 
+      count: Object.keys(room.peers).length 
+    }));
 
+  // Broadcast to ALL connected clients, not just room members
   server.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'publicRooms', rooms: publicRooms }));
+      client.send(JSON.stringify({ 
+        type: 'publicRooms', 
+        rooms: publicRooms 
+      }));
     }
   });
 }
@@ -31,9 +37,13 @@ function broadcastRoomPeers(roomId) {
     nickname: info.nickname
   }));
 
+  // Broadcast only to clients in this specific room
   Object.values(room.peers).forEach(({ socket }) => {
     if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'roomPeers', peers: peerList }));
+      socket.send(JSON.stringify({ 
+        type: 'roomPeers', 
+        peers: peerList 
+      }));
     }
   });
 }
@@ -41,28 +51,35 @@ function broadcastRoomPeers(roomId) {
 // ---------------- Room management ----------------
 function joinRoom(socket, roomId, uid, nickname, isPublic) {
   if (!rooms[roomId]) {
+    // Create new room with the specified public/private status
     rooms[roomId] = { public: isPublic, peers: {} };
   }
-
-  rooms[roomId].public = Object.keys(rooms[roomId].peers).length > 0
-    ? rooms[roomId].public
-    : isPublic;
+  // If room exists, don't change its public/private status
+  // Users can only join existing rooms regardless of their isPublic flag
 
   rooms[roomId].peers[uid] = { socket, nickname };
 
+  // Broadcast updates to all affected clients
   broadcastRoomPeers(roomId);
-  broadcastPublicRooms();
+  broadcastPublicRooms(); // Update ALL clients with new room counts
 }
 
 function leaveRoom(uid) {
   for (const [roomId, room] of Object.entries(rooms)) {
     if (room.peers[uid]) {
       delete room.peers[uid];
+      
+      // Update room members about the new peer list
       broadcastRoomPeers(roomId);
+      
+      // Clean up empty rooms
       if (Object.keys(room.peers).length === 0) {
         delete rooms[roomId];
       }
+      
+      // Update ALL clients with new public room counts
       broadcastPublicRooms();
+      break; // User can only be in one room at a time
     }
   }
 }
@@ -97,13 +114,18 @@ server.on('connection', socket => {
         if (room && room.peers[to]) {
           const targetSocket = room.peers[to].socket;
           if (targetSocket.readyState === WebSocket.OPEN) {
-            targetSocket.send(JSON.stringify({ type: 'signal', from, signal }));
+            targetSocket.send(JSON.stringify({ 
+              type: 'signal', 
+              from, 
+              signal 
+            }));
           }
         }
         break;
       }
 
       case 'listRooms':
+        // Send current public rooms to this client
         broadcastPublicRooms();
         break;
 
@@ -112,15 +134,26 @@ server.on('connection', socket => {
     }
   });
 
-  socket.on('close', () => leaveRoom(currentUid));
-  socket.on('error', () => leaveRoom(currentUid));
+  socket.on('close', () => {
+    if (currentUid) {
+      leaveRoom(currentUid);
+    }
+  });
+
+  socket.on('error', () => {
+    if (currentUid) {
+      leaveRoom(currentUid);
+    }
+  });
 });
 
-// Periodic authoritative update of rooms and peers
+// Periodic authoritative update of rooms and peers every 1.5 seconds
 setInterval(() => {
+  // Update room peers for each room (sent only to room members)
   Object.keys(rooms).forEach(roomId => {
     broadcastRoomPeers(roomId);
   });
+  
+  // Update public room list for ALL connected clients
   broadcastPublicRooms();
 }, 1500);
-
