@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateUserList(peersInRoom) {
+    console.log("Current peers:", peersInRoom.map(p => p.uid)); 
     userList.innerHTML = '';
     peersInRoom.forEach(({ uid, nickname }) => {
       const li = document.createElement('li');
