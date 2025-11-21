@@ -1,7 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const db = firebase.database();
-  const auth = firebase.auth();
-
   const hostBtn = document.getElementById('hostBtn');
   const joinBtn = document.getElementById('connectBtn');
   const nicknameInput = document.getElementById('nicknameInput');
@@ -15,13 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const publicToggle = document.getElementById('publicRoomToggle');
   const publicRoomList = document.getElementById('publicRoomList');
 
-  let roomId = null;
-  let uid = null;
-  let nickname = null;
-  let isPublic = false;
-
   const peers = {};
   const DEFAULT_ROOMS = { 'RoomOne': 'count-room1' };
+  let ws = null;
+
+  let uid = Math.random().toString(36).substring(2, 10); // simple uid
+  let nickname = null;
+  let roomId = null;
+  let isPublic = false;
 
   function setStatus(connected) {
     connectionStatus.textContent = connected ? '🟢 Connected' : '🔴 Disconnected';
@@ -37,6 +35,14 @@ document.addEventListener('DOMContentLoaded', () => {
     chat.scrollTop = chat.scrollHeight;
   }
 
+  function logChatMessage(sender, msg, isLocal) {
+    const div = document.createElement('div');
+    div.textContent = `${sender}: ${msg}`;
+    div.className = isLocal ? 'your-msg' : 'peer-msg';
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
   function updateUserList(peersInRoom) {
     const userList = document.getElementById('userList');
     userList.innerHTML = '';
@@ -47,44 +53,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function logChatMessage(sender, msg, isLocal) {
-    const div = document.createElement('div');
-    div.textContent = `${sender}: ${msg}`;
-    div.className = isLocal ? 'your-msg' : 'peer-msg';
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-  }
-
-  function sendSignal(toUid, signalData) {
-    db.ref(`rooms/${roomId}/peers/${toUid}/signals/${uid}`).set(signalData);
-  }
-
-  function clearSignal(toUid) {
-    db.ref(`rooms/${roomId}/peers/${toUid}/signals/${uid}`).remove();
-  }
-
-  function listenForSignals() {
-    const signalsRef = db.ref(`rooms/${roomId}/peers/${uid}/signals`);
-    signalsRef.on('child_added', snapshot => {
-      const fromUid = snapshot.key;
-      const signalData = snapshot.val();
-
-      if (!peers[fromUid]) createPeerConnection(fromUid, false);
-
-      try { peers[fromUid].peer.signal(signalData); } 
-      catch (e) { console.error('Error signaling peer:', e); }
-
-      clearSignal(fromUid);
-    });
-  }
-
   function createPeerConnection(otherUid, initiator) {
     if (peers[otherUid]) return;
 
     const newPeer = new SimplePeer({ initiator, trickle: false });
     peers[otherUid] = { peer: newPeer, nickname: null };
 
-    newPeer.on('signal', data => sendSignal(otherUid, data));
+    newPeer.on('signal', data => {
+      ws.send(JSON.stringify({
+        type: 'signal',
+        from: uid,
+        to: otherUid,
+        data
+      }));
+    });
 
     newPeer.on('connect', () => {
       setStatus(true);
@@ -116,140 +98,146 @@ document.addEventListener('DOMContentLoaded', () => {
     newPeer.on('error', err => console.error('Peer error:', err));
   }
 
-  function setupRoomListeners() {
-    const peersRef = db.ref(`rooms/${roomId}/peers`);
-    peersRef.on('value', snapshot => {
-      const peersInRoom = snapshot.val() || {};
-      const otherPeers = Object.keys(peersInRoom).filter(id => id !== uid);
+  function connectWebSocket() {
+    ws = new WebSocket('wss://p2pchat-r8so.onrender.com'); 
 
-      otherPeers.forEach(otherUid => {
-        if (!peers[otherUid]) {
-          const initiator = uid < otherUid;
-          createPeerConnection(otherUid, initiator);
-        }
-      });
-
-      Object.keys(peers).forEach(id => {
-        if (!peersInRoom[id]) {
-          peers[id].peer.destroy();
-          delete peers[id];
-        }
-      });
-
-      if (Object.keys(peersInRoom).length === 0) db.ref(`rooms/${roomId}`).remove();
-      setStatus(Object.keys(peers).length > 0);
-      updateUserList(peersInRoom);
-    });
-
-    listenForSignals();
-  }
-
-  function updateRoomList() {
-    const roomsRef = db.ref('rooms');
-    roomsRef.on('value', snapshot => {
-      const rooms = snapshot.val() || {};
-      Object.entries(DEFAULT_ROOMS).forEach(([name, id]) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = 'Users: 0';
-      });
-
-      const publicRooms = [];
-      for (const [id, room] of Object.entries(rooms)) {
-        const userCount = Object.keys(room.peers || {}).length;
-        if (DEFAULT_ROOMS[id]) {
-          const el = document.getElementById(DEFAULT_ROOMS[id]);
-          if (el) el.textContent = `Users: ${userCount}`;
-        } else if (room.public && userCount > 0) publicRooms.push({ id, count: userCount });
-        else if (room.public && userCount === 0) db.ref(`rooms/${id}`).remove();
+    ws.onopen = () => {
+      setStatus(true);
+      logSystemMessage('Connected to signaling server.');
+      // join the room if roomId is already set
+      if (roomId) {
+        ws.send(JSON.stringify({
+          type: 'join',
+          uid,
+          nickname,
+          roomId,
+          public: isPublic
+        }));
       }
+    };
 
-      publicRoomList.innerHTML = '';
-      publicRooms.forEach(({ id, count }) => {
-        const li = document.createElement('li');
-        li.textContent = `${id}: ${count} users`;
-        publicRoomList.appendChild(li);
-      });
-    });
+    ws.onmessage = (event) => {
+      let msg = null;
+      try { msg = JSON.parse(event.data); } catch { return; }
+
+      switch (msg.type) {
+        case 'signal':
+          if (!peers[msg.from]) createPeerConnection(msg.from, false);
+          try { peers[msg.from].peer.signal(msg.data); } catch (e) { console.error('Error signaling:', e); }
+          break;
+
+        case 'chat':
+          logChatMessage(msg.from, msg.message, false);
+          break;
+
+        case 'updateUsers':
+          const peersInRoom = {};
+          msg.users.forEach(u => {
+            peersInRoom[u.uid] = { nickname: u.nickname };
+          });
+          updateUserList(peersInRoom);
+
+          // connect to any new peers
+          msg.users.forEach(u => {
+            if (u.uid !== uid && !peers[u.uid]) {
+              const initiator = uid < u.uid;
+              createPeerConnection(u.uid, initiator);
+            }
+          });
+          break;
+
+        case 'publicRooms':
+          publicRoomList.innerHTML = '';
+          msg.rooms.forEach(r => {
+            if (!DEFAULT_ROOMS[r.id]) {
+              const li = document.createElement('li');
+              li.textContent = `${r.id}: ${r.count} users`;
+              publicRoomList.appendChild(li);
+            }
+          });
+          break;
+
+        default:
+          console.warn('Unknown server message type:', msg.type);
+      }
+    };
+
+    ws.onclose = () => setStatus(false);
+    ws.onerror = (err) => console.error('WebSocket error:', err);
   }
 
-  // ---- Anonymous authentication before allowing chat ----
-  auth.signInAnonymously().then(() => {
-    uid = auth.currentUser.uid;
-    console.log("Signed in anonymously. UID:", uid);
+  function joinOrHostRoom(isHost) {
+    nickname = nicknameInput.value.trim();
+    if (!nickname) return alert('Enter a nickname.');
 
-    hostBtn.addEventListener('click', () => {
-      nickname = nicknameInput.value.trim();
-      if (!nickname) return alert('Enter a nickname.');
+    roomId = isHost ? (roomIdInput.value.trim() || Math.random().toString(36).substring(2,10))
+                    : connectToRoomInput.value.trim();
+    if (!roomId) return alert('Enter a Room ID.');
 
-      const inputRoomId = roomIdInput.value.trim();
-      roomId = inputRoomId || Math.random().toString(36).substring(2,10);
-      roomIdInput.value = roomId;
+    isPublic = isHost ? publicToggle.checked : false;
 
-      isPublic = publicToggle.checked;
+    if (!ws || ws.readyState !== WebSocket.OPEN) connectWebSocket();
 
-      const myPeerRef = db.ref(`rooms/${roomId}/peers/${uid}`);
-      myPeerRef.set({ nickname });
-      myPeerRef.onDisconnect().remove();
+    // wait a bit for WS connection
+    const joinMsg = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'join',
+          uid,
+          nickname,
+          roomId,
+          public: isPublic
+        }));
+        logSystemMessage(`${isHost ? 'Hosting' : 'Joining'} room: ${roomId} as ${nickname}`);
+      } else {
+        setTimeout(joinMsg, 100);
+      }
+    };
+    joinMsg();
 
-      db.ref(`rooms/${roomId}/public`).set(isPublic);
+    messageInput.disabled = false;
+    sendBtn.disabled = false;
+  }
 
-      logSystemMessage(`Hosting room: ${roomId} (${isPublic ? 'Public' : 'Private'})`);
+  hostBtn.addEventListener('click', () => joinOrHostRoom(true));
+  joinBtn.addEventListener('click', () => joinOrHostRoom(false));
 
-      setupRoomListeners();
-      messageInput.disabled = false;
-      sendBtn.disabled = false;
+  sendBtn.addEventListener('click', () => {
+    const msg = messageInput.value.trim();
+    if (!msg) return;
+    logChatMessage('Me', msg, true);
+    messageInput.value = '';
+    Object.values(peers).forEach(({ peer }) => {
+      if (peer.connected) peer.send(msg);
     });
-
-    joinBtn.addEventListener('click', () => {
-      nickname = nicknameInput.value.trim();
-      if (!nickname) return alert('Enter a nickname.');
-
-      roomId = connectToRoomInput.value.trim();
-      if (!roomId) return alert('Enter a Room ID to connect.');
-
-      const myPeerRef = db.ref(`rooms/${roomId}/peers/${uid}`);
-      myPeerRef.set({ nickname });
-      myPeerRef.onDisconnect().remove();
-
-      logSystemMessage(`Joining room: ${roomId} as ${nickname}`);
-
-      setupRoomListeners();
-      messageInput.disabled = false;
-      sendBtn.disabled = false;
-    });
-
-    sendBtn.addEventListener('click', () => {
-      const msg = messageInput.value.trim();
-      if (!msg) return;
-
-      logChatMessage('Me', msg, true);
-      messageInput.value = '';
-
-      Object.values(peers).forEach(({ peer }) => {
-        if (peer.connected) peer.send(msg);
-      });
-    });
-
-    messageInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') sendBtn.click();
-    });
-
-    copyRoomIdBtn.addEventListener('click', () => {
-      if (!roomId) return alert('No Room ID to copy.');
-      navigator.clipboard.writeText(roomId).then(() => alert(`Copied Room ID: ${roomId}`));
-    });
-
-    setStatus(false);
-    messageInput.disabled = true;
-    sendBtn.disabled = true;
-
-    updateRoomList();
-  }).catch(err => {
-    console.error("Anonymous auth failed:", err);
-    alert("Could not sign in. Please refresh.");
+    // also broadcast to server chat for record if needed
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'chat', from: nickname, message: msg }));
+    }
   });
 
+  messageInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendBtn.click();
+  });
+
+  copyRoomIdBtn.addEventListener('click', () => {
+    if (!roomId) return alert('No Room ID to copy.');
+    navigator.clipboard.writeText(roomId).then(() => alert(`Copied Room ID: ${roomId}`));
+  });
+
+  setStatus(false);
+  messageInput.disabled = true;
+  sendBtn.disabled = true;
+
+  // periodically request public room list
+  setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'listRooms' }));
+    }
+  }, 3000);
+
   window.addEventListener('beforeunload', () => {
-    if (roomId && uid) db.ref(`rooms/${roomId}/peers/${uid}`).remove();
+    // no automatic cleanup needed on WS, server handles disconnect
+    Object.values(peers).forEach(({ peer }) => peer.destroy());
   });
 });
