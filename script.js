@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update Public count
     if (roomId === 'Public') {
       const countEl = document.getElementById('count-public');
-      const totalUsers = peersInRoom.length + 1; 
+      const totalUsers = peersInRoom.length; 
       countEl.textContent = `Users: ${totalUsers}`;
     }
       updatePeersStatus();
