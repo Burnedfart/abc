@@ -67,11 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
       li.textContent = `${nickname || 'No nickname'} (${uid})`;
       userList.appendChild(li);
     });
-    // Update RoomOne count
-    if (roomId === 'RoomOne') {
-      const countEl = document.getElementById('count-room1');
-      countEl.textContent = `Users: ${peersInRoom.length + 1}`; // +1 for yourself
-    }  
+    // Update Public count
+    if (roomId === 'Public') {
+      const countEl = document.getElementById('count-public');
+      const totalUsers = peersInRoom.length + 1; 
+      countEl.textContent = `Users: ${totalUsers}`;
+    }
       updatePeersStatus();
     }
 
