@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>P2P Chat</title>
   <link rel="stylesheet" href="style.css" />
+  <script src="simplepeer.min.js"></script>
 </head>
 <body>
   <div class="main-container">
     <div class="instructions">
       <h2>How to use</h2>
-      <p>Join RoomOne for public chat or host any custom Room ID. Share the Room ID with friends to connect.</p>
+      <p>The public chat room is called RoomOne. Join it to chat with others. For private chats, host any Room ID and share it.</p>
+      <p>To create a custom room ID, type it in and click Host Room. Share your room ID with others to connect.</p>
       <h3>Default Rooms</h3>
       <ul>
         <li>RoomOne: <span id="count-room1">Users: 0</span></li>
@@ -18,12 +20,19 @@
       <h3>Public Rooms</h3>
       <ul id="publicRoomList"></ul>
     </div>
+
     <div class="chat-container">
-      <div id="connection-status">🔴 Disconnected</div>
+      <div id="statusContainer">
+        <strong>Status:</strong><br />
+        <span id="serverStatus">Connected to server: ❌</span><br />
+        <span id="peersStatus">Connected to other users: ❌</span>
+      </div>
+
       <div>
         <label>Your Nickname:</label><br />
         <input type="text" id="nicknameInput" placeholder="Enter your nickname" />
       </div>
+
       <div style="margin-top: 10px;">
         <label>Host a Room:</label><br />
         <input type="text" id="roomId" placeholder="Enter Room ID (or leave blank)" />
@@ -32,25 +41,27 @@
           <input type="checkbox" id="publicRoomToggle"> Make room public
         </label>
       </div>
-      <div style="margin-top: 10px;">
-        <label>Connect to Room:</label><br />
-        <input type="text" id="connectToRoom" placeholder="Enter Room ID" />
+
+      <div style="margin-top: 20px;">
+        <label>Connect to another Room ID:</label><br />
+        <input type="text" id="connectToRoom" placeholder="Paste their Room ID here" />
         <button id="connectBtn">Connect</button>
       </div>
+
       <div id="chat"></div>
+
       <div style="margin-top:10px;">
         <input type="text" id="messageInput" placeholder="Type your message..." disabled />
         <button id="sendBtn" disabled>Send</button>
         <button id="disconnectBtn">Disconnect</button>
       </div>
     </div>
+
     <div class="userListPane">
       <h3>Connected Users</h3>
       <ul id="userList"></ul>
     </div>
   </div>
-
-  <script src="simplepeer.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
