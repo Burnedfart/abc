@@ -5,24 +5,32 @@ const server = new WebSocket.Server({ port: PORT });
 
 console.log(`Signaling server running on port ${PORT}`);
 
-// In-memory rooms
-const rooms = {};
+// In-memory rooms - start with Public room always available
+const rooms = {
+  'Public': { public: true, peers: {} } // Public room always exists
+};
 
 // ---------------- Utility functions ----------------
 function broadcastPublicRooms() {
   const publicRooms = Object.entries(rooms)
-    .filter(([_, room]) => room.public)
+    .filter(([id, room]) => room.public && id !== 'Public') // Exclude Public from other public rooms list
     .map(([id, room]) => ({ 
       id, 
       count: Object.keys(room.peers).length 
     }));
+
+  // Also include Public room count in the broadcast for clients to use
+  const publicRoomData = {
+    publicRoomCount: Object.keys(rooms['Public'].peers).length,
+    otherPublicRooms: publicRooms
+  };
 
   // Broadcast to ALL connected clients, not just room members
   server.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ 
         type: 'publicRooms', 
-        rooms: publicRooms 
+        ...publicRoomData
       }));
     }
   });
@@ -50,16 +58,23 @@ function broadcastRoomPeers(roomId) {
 
 // ---------------- Room management ----------------
 function joinRoom(socket, roomId, uid, nickname, isPublic) {
-  // "Public" room is always public, regardless of checkbox
-  const shouldBePublic = (roomId === 'Public') ? true : isPublic;
+  // "Public" room is always public and always exists
+  if (roomId === 'Public') {
+    // Always join the permanent Public room
+    rooms['Public'].peers[uid] = { socket, nickname };
+    broadcastRoomPeers('Public');
+    broadcastPublicRooms();
+    return;
+  }
+
+  // Handle other rooms
+  const shouldBePublic = isPublic;
   
   if (!rooms[roomId]) {
     rooms[roomId] = { public: shouldBePublic, peers: {} };
   }
 
   rooms[roomId].peers[uid] = { socket, nickname };
-
-  // Broadcast updates to all affected clients
   broadcastRoomPeers(roomId);
   broadcastPublicRooms();
 }
@@ -68,18 +83,15 @@ function leaveRoom(uid) {
   for (const [roomId, room] of Object.entries(rooms)) {
     if (room.peers[uid]) {
       delete room.peers[uid];
-      
-      // Update room members about the new peer list
       broadcastRoomPeers(roomId);
       
-      // Clean up empty rooms
-      if (Object.keys(room.peers).length === 0) {
+      // Never delete the Public room, only delete other empty rooms
+      if (roomId !== 'Public' && Object.keys(room.peers).length === 0) {
         delete rooms[roomId];
       }
       
-      // Update ALL clients with new public room counts
       broadcastPublicRooms();
-      break; // User can only be in one room at a time
+      break;
     }
   }
 }
@@ -99,9 +111,16 @@ server.on('connection', socket => {
       case 'join': {
         const { roomId, uid, nickname, isPublic } = data;
         
-        // Check if room exists for join attempts
+        // For Public room, always allow join (it always exists)
+        if (roomId === 'Public') {
+          currentRoom = roomId;
+          currentUid = uid;
+          joinRoom(socket, roomId, uid, nickname, true); // Force public for Public room
+          break;
+        }
+        
+        // For other rooms, check if they exist
         if (!rooms[roomId]) {
-          // Room doesn't exist - send error
           socket.send(JSON.stringify({ 
             type: 'error', 
             message: `Room "${roomId}" doesn't exist. Host it first!` 
@@ -136,13 +155,21 @@ server.on('connection', socket => {
       }
 
       case 'listRooms':
-        // Send current public rooms to this client
         broadcastPublicRooms();
         break;
 
       case 'host': {
-        // New host message type for creating rooms
         const { roomId, uid, nickname, isPublic } = data;
+        
+        // Prevent hosting a room called "Public" since it's permanent
+        if (roomId === 'Public') {
+          socket.send(JSON.stringify({ 
+            type: 'error', 
+            message: `"Public" room is always available. Just click "Connect" to join it!` 
+          }));
+          break;
+        }
+        
         currentRoom = roomId;
         currentUid = uid;
         joinRoom(socket, roomId, uid, nickname, isPublic);
@@ -169,11 +196,8 @@ server.on('connection', socket => {
 
 // Periodic authoritative update of rooms and peers every 1.5 seconds
 setInterval(() => {
-  // Update room peers for each room (sent only to room members)
   Object.keys(rooms).forEach(roomId => {
     broadcastRoomPeers(roomId);
   });
-  
-  // Update public room list for ALL connected clients
   broadcastPublicRooms();
 }, 1500);
