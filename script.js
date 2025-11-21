@@ -105,30 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
               publicRoomList.appendChild(li);
             }
           break;
-        case 'publicRooms':
-          publicRoomList.innerHTML = '';
-          msg.rooms.forEach(r => {
-            if (r.count > 0) {
-              const li = document.createElement('li');
-              li.textContent = `${r.id}: ${r.count} users`;
-              publicRoomList.appendChild(li);
-            }
-            
-            // Update the hardcoded Public room count
-            if (r.id === 'Public') {
-              const countEl = document.getElementById('count-public');
-              countEl.textContent = `Users: ${r.count}`;
-            }
-          });
-          
-          // If Public room doesn't exist in publicRooms, set count to 0
-          const publicRoomExists = msg.rooms.some(r => r.id === 'Public');
-          if (!publicRoomExists) {
-            const countEl = document.getElementById('count-public');
-            countEl.textContent = 'Users: 0';
-          }
-          break;
-
         case 'roomPeers':
           updateUserList(msg.peers);
           
