@@ -113,7 +113,7 @@ server.on('connection', socket => {
           break;
         }
         
-        // For other rooms, check if they exist
+        // For other rooms, check if they exist (EXCLUDING Public room)
         if (!rooms[roomId]) {
           socket.send(JSON.stringify({ 
             type: 'error', 
