@@ -1,3 +1,4 @@
+// server.js
 const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 3000;
@@ -49,7 +50,6 @@ function joinRoom(socket, roomId, uid, nickname, isPublic) {
 
   rooms[roomId].peers[uid] = { socket, nickname };
 
-  // Broadcast to all clients in the room and all connected clients
   broadcastRoomPeers(roomId);
   broadcastPublicRooms();
 }
@@ -57,17 +57,7 @@ function joinRoom(socket, roomId, uid, nickname, isPublic) {
 function leaveRoom(uid) {
   for (const [roomId, room] of Object.entries(rooms)) {
     if (room.peers[uid]) {
-      
-      Object.values(room.peers).forEach(({ socket }) => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: 'user-left',
-            uid
-          }));
-        }
-      });
       delete room.peers[uid];
-
       broadcastRoomPeers(roomId);
       if (Object.keys(room.peers).length === 0) {
         delete rooms[roomId];
@@ -94,11 +84,6 @@ server.on('connection', socket => {
         currentRoom = roomId;
         currentUid = uid;
         joinRoom(socket, roomId, uid, nickname, isPublic);
-
-        // Send current public rooms to this new client immediately
-        if (socket.readyState === WebSocket.OPEN) {
-          broadcastPublicRooms();
-        }
         break;
       }
 
@@ -130,3 +115,12 @@ server.on('connection', socket => {
   socket.on('close', () => leaveRoom(currentUid));
   socket.on('error', () => leaveRoom(currentUid));
 });
+
+// Periodic authoritative update of rooms and peers
+setInterval(() => {
+  Object.keys(rooms).forEach(roomId => {
+    broadcastRoomPeers(roomId);
+  });
+  broadcastPublicRooms();
+}, 1500);
+
