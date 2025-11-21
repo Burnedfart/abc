@@ -1,3 +1,4 @@
+// script.js
 document.addEventListener('DOMContentLoaded', () => {
   const hostBtn = document.getElementById('hostBtn');
   const joinBtn = document.getElementById('connectBtn');
@@ -35,8 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function updatePeersStatus() {
     const peerCount = Object.values(peers).length;
     const anyConnected = Object.values(peers).some(p => p.peer.connected);
-    setPeersStatus(anyConnected);
-    
     if (peerCount === 0) {
       peersStatusEl.textContent = 'Connected to other users: ⏳ Waiting for another user for status';
     } else {
@@ -61,28 +60,24 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateUserList(peersInRoom) {
-    console.log("Current peers:", peersInRoom.map(p => p.uid)); 
     userList.innerHTML = '';
     peersInRoom.forEach(({ uid, nickname }) => {
       const li = document.createElement('li');
       li.textContent = `${nickname || 'No nickname'} (${uid})`;
       userList.appendChild(li);
     });
-    // Update Public count
     if (roomId === 'Public') {
       const countEl = document.getElementById('count-public');
       const totalUsers = peersInRoom.length; 
       countEl.textContent = `Users: ${totalUsers}`;
     }
-      updatePeersStatus();
-    }
+    updatePeersStatus();
+  }
 
   function connectWebSocket() {
     ws = new WebSocket(WS_ENDPOINT);
 
-    ws.onopen = () => {
-      setServerStatus(true);
-    };
+    ws.onopen = () => setServerStatus(true);
     ws.onclose = () => setServerStatus(false);
     ws.onerror = () => setServerStatus(false);
 
@@ -132,18 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         case 'user-left':
           const gone = msg.uid;
-
           if (peers[gone]) {
             peers[gone].peer.destroy();
             delete peers[gone];
           }
-          updateUserList(
-            Object.values(peers).map(p => ({
-            uid: Object.keys(peers).find(k => peers[k] === p),
-            nickname: p.nickname
-          }))
-        );
-        break;
+          break;
       }
     };
   }
@@ -160,7 +148,6 @@ document.addEventListener('DOMContentLoaded', () => {
     peers[otherUid] = { peer: newPeer, nickname: null };
 
     newPeer.on('signal', data => sendSignal(otherUid, data));
-
     newPeer.on('connect', () => {
       logSystemMessage(`Connected to peer ${otherUid}`);
       updatePeersStatus();
@@ -241,14 +228,10 @@ document.addEventListener('DOMContentLoaded', () => {
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendBtn.click(); });
 
-  // Periodically update public room list
+  // Periodically request public rooms (optional for UI)
   setInterval(() => {
-    if (ws && ws.readyState === WebSocket.OPEN) broadcastPublicRoomsRequest();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'listRooms' }));
   }, 4000);
-
-  function broadcastPublicRoomsRequest() {
-    ws.send(JSON.stringify({ type: 'listRooms' }));
-  }
 
   window.addEventListener('beforeunload', disconnectFromRoom);
 });
