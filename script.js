@@ -224,6 +224,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     ws.send(JSON.stringify({ type: 'join', uid, nickname, roomId, isPublic }));
     logSystemMessage(`Attempting to join room: ${roomId}`);
+    messageInput.disabled = false;  // FIX: Enable chat inputs
+    sendBtn.disabled = false;       // FIX: Enable send button
   }
 
   function joinPublicRoom() {
