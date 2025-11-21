@@ -210,10 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
     Object.values(peers).forEach(({ peer }) => {
       if (peer.connected) peer.send(msg);
     });
-    // also broadcast to server chat for record if needed
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'chat', from: nickname, message: msg }));
-    }
   });
 
   messageInput.addEventListener('keydown', e => {
