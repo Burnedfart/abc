@@ -129,6 +129,21 @@ document.addEventListener('DOMContentLoaded', () => {
         case 'chat':
           logChatMessage(msg.from, msg.message, false);
           break;
+
+        case 'user-left':
+          const gone = msg.uid;
+
+          if (peers[gone]) {
+            peers[gone].peer.destroy();
+            delete peers[gone];
+          }
+          updateUserList(
+            Object.values(peers).map(p => ({
+            uid: Object.keys(peers).find(k => peers[k] === p),
+            nickname: p.nickname
+          }))
+        );
+        break;
       }
     };
   }
