@@ -33,8 +33,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updatePeersStatus() {
+    const peerCount = Object.values(peers).length;
     const anyConnected = Object.values(peers).some(p => p.peer.connected);
     setPeersStatus(anyConnected);
+    
+    if (peerCount === 0) {
+      peersStatusEl.textContent = 'Connected to other users: ⏳ Waiting for another user for status';
+    } else {
+      setPeersStatus(anyConnected);
+    }
   }
 
   function logSystemMessage(msg) {
@@ -60,8 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
       li.textContent = `${nickname || 'No nickname'} (${uid})`;
       userList.appendChild(li);
     });
-    updatePeersStatus();
-  }
+    // Update RoomOne count
+    if (roomId === 'RoomOne') {
+      const countEl = document.getElementById('count-room1');
+      countEl.textContent = `Users: ${peersInRoom.length + 1}`; // +1 for yourself
+    }  
+      updatePeersStatus();
+    }
 
   function connectWebSocket() {
     ws = new WebSocket(WS_ENDPOINT);
